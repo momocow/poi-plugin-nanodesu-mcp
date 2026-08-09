@@ -15,10 +15,12 @@ const main = async () => {
   )
   console.log('ADMIRAL: lv', basic.value.api_level, '| ships max', basic.value.api_max_chara)
 
+  // info.resources is an array, so it comes back as a collection in `items`.
   const res = JSON.parse(
     text(await client.callTool({ name: 'poi_get', arguments: { path: 'info.resources' } })),
   )
-  console.log('RESOURCES:', JSON.stringify(res.value))
+  const [fuel, ammo, steel, bauxite] = res.items as number[]
+  console.log(`RESOURCES: fuel ${fuel} ammo ${ammo} steel ${steel} bauxite ${bauxite}`)
 
   const damaged = JSON.parse(
     text(
