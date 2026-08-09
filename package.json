@@ -1,0 +1,25 @@
+{
+  "name": "poi-plugin-mcp",
+  "version": "0.1.0",
+  "description": "Expose poi's live game state to agents over MCP",
+  "main": "index.ts",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --import tsx --test test/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.21.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "tsx": "^4.20.7",
+    "typescript": "^5.9.3"
+  },
+  "poiPlugin": {
+    "title": "MCP",
+    "description": "Expose live game state to agents over MCP",
+    "icon": "fa/plug",
+    "priority": 100
+  }
+}
