@@ -1,24 +1,16 @@
 /**
- * Ambient declarations for modules this plugin resolves from poi at runtime.
+ * Ambient declaration for `react`, which this plugin resolves from poi at
+ * runtime rather than installing.
  *
- * None of these are installed as dependencies on purpose. poi adds its own ROOT
- * and node_modules to the require path, so `views/*` and `react` resolve to
- * poi's copies when the plugin is loaded. Installing react here would put a
+ * poi adds its own node_modules to the require path, so `react` resolves to
+ * poi's copy when the plugin is loaded. Installing react here would put a
  * second copy inside the plugin's own node_modules, which would shadow poi's
  * and break reconciliation in the shared renderer.
+ *
+ * poi's `views/*` modules are deliberately NOT declared here. This plugin reads
+ * poi's `window` globals through src/poi.ts instead, because the named exports
+ * those modules provide differ between poi's released and development builds.
  */
-
-declare module 'views/create-store' {
-  export function getStore(path?: string): unknown
-}
-
-declare module 'views/env' {
-  export const isMain: boolean | undefined
-  export const config: {
-    get<T>(path: string, fallback: T): T
-    set(path: string, value: unknown): void
-  }
-}
 
 declare module 'react' {
   export class Component<P = Record<string, unknown>, S = Record<string, unknown>> {

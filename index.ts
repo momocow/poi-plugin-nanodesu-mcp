@@ -1,6 +1,4 @@
-import { getStore } from 'views/create-store'
-import { config, isMain } from 'views/env'
-
+import { isMainWindow, readPortConfig, resolveGetStore } from './src/poi.ts'
 import { DEFAULT_PORT, startMcpServer, type ServerHandle } from './src/server.ts'
 import { setStatus, StatusPanel } from './src/status.ts'
 import { withTimeout } from './src/timeout.ts'
@@ -8,9 +6,8 @@ import { withTimeout } from './src/timeout.ts'
 export const PORT_CONFIG_KEY = 'plugin.mcp.port'
 
 /**
- * Startup must either succeed or say why, within a bounded time. An earlier
- * version could hang here forever with the panel reading "stopped" and nothing
- * in the console — the failure mode that is hardest to diagnose.
+ * Startup must either succeed or say why, within a bounded time. Silence is the
+ * failure mode that is hardest to diagnose.
  */
 export const START_TIMEOUT_MS = 15_000
 
@@ -21,10 +18,12 @@ let handle: ServerHandle | undefined
 export const reactClass = StatusPanel
 
 export const pluginDidLoad = (): void => {
+  const poiWindow = typeof window === 'undefined' ? undefined : window
+
   // The store exists in plugin windows too, so without this guard a second
   // window would try to bind the same port and fail with EADDRINUSE.
-  if (!isMain) {
-    console.log(`${LOG_PREFIX} not the main window (isMain=${String(isMain)}); server not started`)
+  if (!isMainWindow(poiWindow)) {
+    console.log(`${LOG_PREFIX} not the main window; server not started`)
     setStatus({
       state: 'stopped',
       error: 'not the main window — the server runs only in poi’s main window',
@@ -33,16 +32,17 @@ export const pluginDidLoad = (): void => {
     return
   }
 
-  let port: number
+  let getStore
   try {
-    port = config.get(PORT_CONFIG_KEY, DEFAULT_PORT)
+    getStore = resolveGetStore(poiWindow)
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e)
-    console.error(`${LOG_PREFIX} could not read ${PORT_CONFIG_KEY}:`, e)
-    setStatus({ state: 'error', error: `could not read config: ${error}`, requestCount: 0 })
+    console.error(`${LOG_PREFIX} cannot reach poi's store:`, e)
+    setStatus({ state: 'error', error, requestCount: 0 })
     return
   }
 
+  const port = readPortConfig(poiWindow, PORT_CONFIG_KEY, DEFAULT_PORT)
   console.log(`${LOG_PREFIX} starting on port ${port}…`)
 
   withTimeout(
