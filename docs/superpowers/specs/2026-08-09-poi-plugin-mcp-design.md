@@ -129,12 +129,14 @@ to leak across a plugin reload. No SSE stream is needed.
 DNS-rebinding protection is enabled, with `Host` and `Origin` validated against
 `127.0.0.1:<port>` and `localhost:<port>`.
 
-**`@modelcontextprotocol/sdk` is ESM-only.** poi's babel config keeps `import()`
-native precisely so ESM-only packages stay loadable (see the
-`supportsDynamicImport: true` comment in `babel-hook.js:41`). The SDK is
-therefore loaded with a dynamic `import()` inside `pluginDidLoad`, never a
-top-level `require`. Getting this wrong is the most likely cause of a failed
-first run.
+**The SDK is loaded with a dynamic `import()`**, which poi's babel config keeps
+native (see the `supportsDynamicImport: true` comment in `babel-hook.js:41`).
+
+The design originally assumed the SDK was ESM-only. It is not: SDK 1.30 is
+dual-published, with a `require` condition in its exports map, so a static
+import would resolve today too — babel would rewrite it to `require` and find
+the CJS build. The dynamic form is kept because it is resolution-agnostic and
+survives the SDK becoming ESM-only later, which a plain `require` would not.
 
 ### Status panel
 

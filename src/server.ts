@@ -42,9 +42,13 @@ export type ServerHandle = {
 }
 
 /**
- * The MCP SDK is ESM-only. poi's babel config keeps `import()` native for
- * exactly this case, so the SDK must be loaded dynamically — a top-level
- * `import`/`require` would be rewritten to `require` and fail at runtime.
+ * The SDK is loaded through a dynamic `import()`, which poi's babel config
+ * keeps native (see the supportsDynamicImport note in poi's babel-hook.js).
+ *
+ * SDK 1.30 is dual-published, so a static import would also resolve today —
+ * babel would rewrite it to `require` and find the CJS build. The dynamic form
+ * is resolution-agnostic: it keeps working if the SDK goes ESM-only, which is
+ * the case a plain `require` cannot survive.
  */
 type Sdk = {
   McpServer: typeof import('@modelcontextprotocol/sdk/server/mcp.js').McpServer
