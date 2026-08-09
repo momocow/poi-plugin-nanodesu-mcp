@@ -334,10 +334,14 @@ export async function startMcpServer(options: ServerOptions): Promise<ServerHand
     const port = typeof address === 'object' && address !== null ? address.port : 0
     handle(req, res, port).catch((e: unknown) => {
       // Never let a request failure escape into the renderer.
+      console.error('[poi-plugin-game-mcp] request failed:', e)
       if (!res.headersSent) {
         res.writeHead(500, { 'content-type': 'text/plain' })
       }
-      res.end(e instanceof Error ? e.message : 'internal error')
+      // The stack goes in the body too. This server is loopback-only with no
+      // CORS, and a request that fails inside poi is otherwise very hard to
+      // diagnose from outside the renderer.
+      res.end(e instanceof Error ? (e.stack ?? e.message) : 'internal error')
     })
   })
 
