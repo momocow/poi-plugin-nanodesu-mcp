@@ -17,6 +17,7 @@ import {
   MAX_LOOKUP_IDS,
   MAX_MAX_BYTES,
 } from './tools.ts'
+import { passthroughValidator } from './validator.ts'
 
 export const SERVER_NAME = 'poi-game-mcp'
 export const SERVER_VERSION = '0.1.0'
@@ -134,7 +135,12 @@ const adapt =
 
 async function buildMcpServer(getStore: () => unknown): Promise<McpServer> {
   const { McpServer: Server } = await loadSdk()
-  const server = new Server({ name: SERVER_NAME, version: SERVER_VERSION })
+  const server = new Server(
+    { name: SERVER_NAME, version: SERVER_VERSION },
+    // Keeps the SDK from constructing its Ajv validator, which breaks inside
+    // poi. See the comment on passthroughValidator.
+    { jsonSchemaValidator: passthroughValidator },
+  )
 
   server.registerTool(
     'poi_get',
