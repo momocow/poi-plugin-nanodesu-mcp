@@ -56,27 +56,53 @@ export type ServerHandle = {
 }
 
 /**
- * The SDK is loaded through a dynamic `import()`, which poi's babel config
- * keeps native (see the supportsDynamicImport note in poi's babel-hook.js).
+ * The SDK is loaded with `require` first, falling back to dynamic `import()`.
  *
- * SDK 1.30 is dual-published, so a static import would also resolve today —
- * babel would rewrite it to `require` and find the CJS build. The dynamic form
- * is resolution-agnostic: it keeps working if the SDK goes ESM-only, which is
- * the case a plain `require` cannot survive.
+ * The original design had this the other way round, on the assumption that the
+ * SDK was ESM-only and that a native `import()` was the robust choice. Both
+ * halves were wrong. SDK 1.30 is dual-published, so `require` resolves its CJS
+ * build; and in poi's renderer — a `file://` page under a script-src CSP — the
+ * native `import()` never settles. It does not reject, so nothing is logged and
+ * nothing can catch it: the plugin just sits at "stopped" forever.
+ *
+ * `require` is also simply the right call in poi, whose whole plugin system is
+ * CJS. The import fallback remains for a future ESM-only SDK.
  */
 type Sdk = {
   McpServer: typeof import('@modelcontextprotocol/sdk/server/mcp.js').McpServer
   StreamableHTTPServerTransport: typeof import('@modelcontextprotocol/sdk/server/streamableHttp.js').StreamableHTTPServerTransport
 }
 
+declare const require: ((id: string) => unknown) | undefined
+
+const MCP_MODULE = '@modelcontextprotocol/sdk/server/mcp.js'
+const HTTP_MODULE = '@modelcontextprotocol/sdk/server/streamableHttp.js'
+
+const asSdk = (mcp: unknown, http: unknown): Sdk | undefined => {
+  const McpServer = (mcp as Partial<Sdk> | undefined)?.McpServer
+  const StreamableHTTPServerTransport = (http as Partial<Sdk> | undefined)
+    ?.StreamableHTTPServerTransport
+  return McpServer && StreamableHTTPServerTransport
+    ? { McpServer, StreamableHTTPServerTransport }
+    : undefined
+}
+
 let sdkPromise: Promise<Sdk> | undefined
 
 const loadSdk = (): Promise<Sdk> => {
   sdkPromise ??= (async () => {
-    const [mcp, http] = await Promise.all([
-      import('@modelcontextprotocol/sdk/server/mcp.js'),
-      import('@modelcontextprotocol/sdk/server/streamableHttp.js'),
-    ])
+    if (typeof require === 'function') {
+      try {
+        const viaRequire = asSdk(require(MCP_MODULE), require(HTTP_MODULE))
+        if (viaRequire) {
+          return viaRequire
+        }
+      } catch {
+        // Fall through to import() — the SDK may be ESM-only.
+      }
+    }
+
+    const [mcp, http] = await Promise.all([import(MCP_MODULE), import(HTTP_MODULE)])
     return {
       McpServer: mcp.McpServer,
       StreamableHTTPServerTransport: http.StreamableHTTPServerTransport,

@@ -129,14 +129,27 @@ to leak across a plugin reload. No SSE stream is needed.
 DNS-rebinding protection is enabled, with `Host` and `Origin` validated against
 `127.0.0.1:<port>` and `localhost:<port>`.
 
-**The SDK is loaded with a dynamic `import()`**, which poi's babel config keeps
-native (see the `supportsDynamicImport: true` comment in `babel-hook.js:41`).
+**The SDK is loaded with `require`,** falling back to dynamic `import()`.
 
-The design originally assumed the SDK was ESM-only. It is not: SDK 1.30 is
-dual-published, with a `require` condition in its exports map, so a static
-import would resolve today too — babel would rewrite it to `require` and find
-the CJS build. The dynamic form is kept because it is resolution-agnostic and
-survives the SDK becoming ESM-only later, which a plain `require` would not.
+This reverses the original design, which had it backwards on two counts. The
+SDK is not ESM-only — 1.30 is dual-published with a `require` condition — and
+the native `import()` chosen "for robustness" is precisely what fails in poi:
+on a `file://` page under a `script-src` CSP, it never settles. Not rejects,
+*never settles*, so nothing is logged and no `.catch` can fire.
+
+The observed symptom was the plugin sitting at "stopped" with a completely
+clean console. `require` is also the natural call in poi, whose plugin system
+is CJS throughout. The `import()` fallback remains for a future ESM-only SDK.
+
+### Startup must not fail silently
+
+Two guards, both added after the hang above:
+
+- **Startup is bounded** by `START_TIMEOUT_MS` (15 s). A promise that never
+  settles becomes a visible error instead of indefinite silence.
+- **Every early return reports itself.** The `isMain` skip and a config-read
+  failure now set an explanatory status and log, rather than returning quietly
+  and leaving the panel indistinguishable from "never started".
 
 ### Health endpoint
 
