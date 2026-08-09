@@ -37,6 +37,12 @@ These were considered and explicitly cut:
 - **Logging or archiving.** No snapshot history, no API traffic capture.
 - **Name resolution in the plugin.** No joining `api_ship_id` to `api_name`, no
   derived fields, no human-readable views. The agent does this.
+- **MCP resource subscriptions.** `resources/subscribe` and
+  `notifications/resources/updated` exist in the protocol, but server-initiated
+  messages need a stateful session and a GET SSE stream, and a notification only
+  tells a client a resource is stale — it cannot start an agent turn. Since
+  every tool call already reads the store live, that invalidation buys nothing.
+  Ruled out deliberately; see "Transport" for the stateless choice it implies.
 
 ## Architecture
 
@@ -62,7 +68,7 @@ directory:
 
 ```sh
 ln -s ~/kancolle/poi-plugin-mcp \
-  "~/Library/Application Support/poi/plugins/node_modules/poi-plugin-mcp"
+  "$HOME/Library/Application Support/poi/plugins/node_modules/poi-plugin-mcp"
 ```
 
 poi globs plugins from `PLUGIN_PATH/node_modules/poi-plugin-*`
@@ -138,7 +144,7 @@ is invisible.
 
 ## Tools
 
-### `poi_get(path, where?, select?, limit?, maxBytes?)`
+### `poi_get(path, where?, select?, limit?, maxBytes?, treatAs?)`
 
 Reads live state.
 
@@ -147,11 +153,12 @@ Reads live state.
 | `path` | string | required | Dot path into the redux root, e.g. `info.ships` |
 | `where` | string | none | Filter expression, grammar below |
 | `select` | string[] | all fields | Fieldpaths to keep |
-| `limit` | number | 200 | Max rows returned |
+| `limit` | number | 200 | Max elements returned |
 | `maxBytes` | number | 65536 | Serialized cap, hard maximum 262144 |
+| `treatAs` | `"collection"` \| `"value"` | inferred | Overrides the collection heuristic |
 
-`where` and `select` apply to the elements of a collection. For a scalar or a
-plain object at `path`, both are ignored and the value is returned as-is.
+How `where`, `select`, and `limit` apply depends on whether the value at `path`
+is a collection or a value — see "Collection vs value" below.
 
 ### `poi_lookup(kind, ids, select?)`
 
@@ -260,6 +267,25 @@ Accepts the same fieldpath syntax as `where`, including nested and indexed
 paths. The path string is used verbatim as the output key, so
 `select:["api_exp[0]"]` yields `{"api_exp[0]": 109619}`.
 
+### Collection vs value
+
+`info.ships` (a map of 381 ships) and `info.basic` (one record) are both plain
+JavaScript objects, so the plugin needs an explicit rule for which is which.
+
+**A value is a collection if it is an array, or an object whose keys are all
+integer-like strings.** Everything else is a value.
+
+This holds throughout the store: `info.ships` and `const.$ships` are keyed by
+id, while `info.basic` is keyed by `api_member_id`, `api_nickname`, and so on.
+
+- **Collections:** `where` and `limit` filter elements; `select` picks fields
+  from each element.
+- **Values:** `where` and `limit` are ignored; `select` picks fields from the
+  object itself. On a scalar, `select` is ignored too.
+
+The `treatAs: "collection" | "value"` parameter overrides the rule when the
+heuristic guesses wrong. It is the escape hatch, not the primary mechanism.
+
 ### Return envelope
 
 ```
@@ -271,16 +297,27 @@ paths. The path string is used verbatim as the output key, so
 - **Object-maps keep their keys.** `items` is an object. This preserves identity
   when a `select` omits the id field.
 - **Arrays keep index order.** `items` is an array.
-- **Objects and scalars** return `value` instead of `items`, with `total`,
-  `returned`, and `truncated` omitted.
+- **Values** (objects and scalars) return `value` instead of `items`, with
+  `total`, `returned`, and `truncated` omitted.
 
 ### Size backstop
 
 After `where`, `select`, and `limit` are applied, the result is serialized and
-capped at `maxBytes`. Over the cap, rows are dropped until it fits and the
-response carries `truncated: true` alongside `total` and `returned`, plus a hint
-to narrow the query. This is what makes a generic tool safe to hand an agent: no
-query can blow up the context by accident.
+capped at `maxBytes`. Over the cap, elements are dropped until it fits. This is
+what makes a generic tool safe to hand an agent: no query can blow up the
+context by accident.
+
+`truncated: true` means elements were dropped, **whether by `limit` or by
+`maxBytes`** — `total` against `returned` shows how many were lost, and the
+response carries a hint to narrow the query.
+
+A **value** that exceeds `maxBytes` has no elements to drop, so it is an error
+naming the serialized size and suggesting a narrower path or a `select`. It is
+never silently cut.
+
+`const` is an allowed root, so `poi_get("const.$ships")` is reachable and would
+trip this cap. That is intended: `poi_lookup` is a convenience that makes the
+cheap path obvious, not a wall. The size backstop is the actual protection.
 
 ## Path allowlist
 
@@ -319,14 +356,16 @@ Errors are shaped so a wrong guess costs one call, not a debugging session.
 | Valid path, empty branch | **Not an error.** `{ total: 0, items: {}, hint: "branch is empty — poi may not have loaded the game yet" }`. Distinguishes "asked wrong" from "asked before login". |
 | `where` parse error | Offending token, its position, and a one-line grammar summary. |
 | `ids` over 200 in `poi_lookup` | Error stating the cap. |
+| Value exceeds `maxBytes` | Error naming the serialized size, suggesting a narrower path or a `select`. Values are never silently cut; only collections are truncated. |
 | Bind failure (`EADDRINUSE`) | Surfaced in the status panel, server left down. **Not** retried on a fallback port — that would silently change the URL and break the agent's config while appearing to work. |
 | Any handler throw | Caught, returned as an MCP error. **Nothing rethrows into the renderer.** The plugin must never be able to take poi down. |
 
 ## Testing
 
 - **`src/query.ts` gets real unit tests.** Pure functions: parser, precedence,
-  undefined handling, select fieldpaths, limit, truncation. This is where the
-  bugs will be.
+  undefined handling, select fieldpaths, limit, truncation, and the
+  collection-vs-value heuristic including the `treatAs` override. This is where
+  the bugs will be.
 - **`src/serialize.ts`** — circular references, functions, depth cap.
 - **`src/paths.ts`** — allowlist enforcement, sibling-key suggestions.
 - **`test/fixtures/store.json`** — a trimmed snapshot of real store data (a few
