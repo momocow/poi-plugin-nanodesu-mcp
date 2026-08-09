@@ -33,7 +33,7 @@ export const pluginDidLoad = (): void => {
       // agent's config while appearing to work.
       const error = e instanceof Error ? e.message : String(e)
       setStatus({ state: 'error', error, requestCount: 0 })
-      console.error('[poi-plugin-mcp] failed to start:', e)
+      console.error('[poi-plugin-game-mcp] failed to start:', e)
     })
 }
 
@@ -44,7 +44,7 @@ export const pluginWillUnload = (): void => {
     return
   }
   started.close().catch((e: unknown) => {
-    console.error('[poi-plugin-mcp] failed to stop cleanly:', e)
+    console.error('[poi-plugin-game-mcp] failed to stop cleanly:', e)
   })
   setStatus({ state: 'stopped', requestCount: 0 })
 }

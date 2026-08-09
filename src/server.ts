@@ -1,6 +1,9 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
+import { mkdirSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http'
+import { homedir } from 'node:os'
+import { dirname, join } from 'node:path'
 import { z } from 'zod'
 
 import {
@@ -15,11 +18,20 @@ import {
   MAX_MAX_BYTES,
 } from './tools.ts'
 
-export const SERVER_NAME = 'poi'
+export const SERVER_NAME = 'poi-game-mcp'
 export const SERVER_VERSION = '0.1.0'
 export const DEFAULT_PORT = 12450
 
 const MAX_BODY_BYTES = 1024 * 1024
+
+/**
+ * Where the listening port is published for clients that need to discover it.
+ *
+ * Deliberately not `~/.poi-mcp/port`: that belongs to the unrelated
+ * `poi-plugin-mcp` package, and both plugins should be able to run at once
+ * without overwriting each other's file.
+ */
+export const defaultPortFile = (): string => join(homedir(), '.poi-game-mcp', 'port')
 
 export type ServerStatus = {
   state: 'stopped' | 'listening' | 'error'
@@ -34,6 +46,8 @@ export type ServerOptions = {
   port: number
   host?: string
   onStatus?: (status: ServerStatus) => void
+  /** Path to publish the listening port to. `null` disables it. */
+  portFile?: string | null
 }
 
 export type ServerHandle = {
@@ -215,8 +229,34 @@ export async function startMcpServer(options: ServerOptions): Promise<ServerHand
   const status: ServerStatus = { state: 'stopped', requestCount: 0 }
   const report = () => options.onStatus?.({ ...status })
 
+  const storeReady = (): boolean => {
+    try {
+      const store = options.getStore()
+      return store !== null && typeof store === 'object' && 'info' in store
+    } catch {
+      return false
+    }
+  }
+
   const handle = async (req: IncomingMessage, res: ServerResponse, port: number) => {
     const path = (req.url ?? '').split('?')[0]
+
+    // No CORS headers anywhere, deliberately: without them a web page cannot
+    // read these responses cross-origin.
+    if (req.method === 'GET' && path === '/health') {
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' })
+      res.end(
+        JSON.stringify({
+          status: 'ok',
+          name: SERVER_NAME,
+          version: SERVER_VERSION,
+          port,
+          storeReady: storeReady(),
+        }),
+      )
+      return
+    }
+
     if (req.method !== 'POST' || path !== '/mcp') {
       res.writeHead(404, { 'content-type': 'text/plain' })
       res.end('not found')
@@ -297,6 +337,17 @@ export async function startMcpServer(options: ServerOptions): Promise<ServerHand
       const address = httpServer.address()
       const port = typeof address === 'object' && address !== null ? address.port : options.port
 
+      const portFile = options.portFile === undefined ? defaultPortFile() : options.portFile
+      if (portFile !== null) {
+        // Publishing the port is a convenience, never a reason to fail startup.
+        try {
+          mkdirSync(dirname(portFile), { recursive: true, mode: 0o700 })
+          writeFileSync(portFile, `${port}\n`, { encoding: 'utf8', mode: 0o600 })
+        } catch (e) {
+          console.warn('[poi-plugin-game-mcp] could not write the port file:', e)
+        }
+      }
+
       status.state = 'listening'
       status.port = port
       delete status.error
@@ -306,6 +357,13 @@ export async function startMcpServer(options: ServerOptions): Promise<ServerHand
         port,
         close: () =>
           new Promise<void>((done) => {
+            if (portFile !== null) {
+              try {
+                unlinkSync(portFile)
+              } catch {
+                // Already gone, or never written. Either way there is nothing to do.
+              }
+            }
             httpServer.close(() => {
               status.state = 'stopped'
               report()

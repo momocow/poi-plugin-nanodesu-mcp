@@ -24,7 +24,7 @@ describe('mcp server over http', () => {
   let current: unknown = store
 
   before(async () => {
-    handle = await startMcpServer({ getStore: () => current, port: 0 })
+    handle = await startMcpServer({ getStore: () => current, port: 0, portFile: null })
     client = new Client({ name: 'test-client', version: '1.0.0' })
     await client.connect(
       new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${handle.port}/mcp`)),
@@ -138,6 +138,7 @@ describe('mcp server over http', () => {
         throw new Error('store exploded')
       },
       port: 0,
+      portFile: null,
     })
     const throwClient = new Client({ name: 'test-client', version: '1.0.0' })
     await throwClient.connect(
@@ -188,16 +189,16 @@ describe('mcp server over http', () => {
   })
 
   test('close stops the listener', async () => {
-    const temporary = await startMcpServer({ getStore: () => store, port: 0 })
+    const temporary = await startMcpServer({ getStore: () => store, port: 0, portFile: null })
     const port = temporary.port
     await temporary.close()
     await assert.rejects(() => fetch(`http://127.0.0.1:${port}/mcp`, { method: 'POST' }))
   })
 
   test('reports a bind failure instead of throwing an unhandled error', async () => {
-    const first = await startMcpServer({ getStore: () => store, port: 0 })
+    const first = await startMcpServer({ getStore: () => store, port: 0, portFile: null })
     await assert.rejects(
-      () => startMcpServer({ getStore: () => store, port: first.port }),
+      () => startMcpServer({ getStore: () => store, port: first.port, portFile: null }),
       /EADDRINUSE|in use/i,
     )
     await first.close()

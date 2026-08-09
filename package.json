@@ -1,7 +1,7 @@
 {
-  "name": "poi-plugin-mcp",
+  "name": "poi-plugin-game-mcp",
   "version": "0.1.0",
-  "description": "Expose poi's live game state to agents over MCP",
+  "description": "Expose poi's live game state to agents over MCP (read-only)",
   "main": "index.ts",
   "license": "MIT",
   "scripts": {
@@ -18,9 +18,10 @@
     "typescript": "^5.9.3"
   },
   "poiPlugin": {
-    "title": "MCP",
+    "title": "Game MCP",
     "description": "Expose live game state to agents over MCP",
     "icon": "fa/plug",
-    "priority": 100
+    "priority": 100,
+    "id": "poi_game_mcp"
   }
 }

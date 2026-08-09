@@ -1,4 +1,4 @@
-# poi-plugin-mcp — Design
+# poi-plugin-game-mcp — Design
 
 **Date:** 2026-08-09
 **Status:** Approved, ready for implementation planning
@@ -48,7 +48,7 @@ These were considered and explicitly cut:
 
 ```
 poi renderer (main window only)
-  └─ poi-plugin-mcp
+  └─ poi-plugin-game-mcp
        ├─ pluginDidLoad     → start server
        ├─ pluginWillUnload  → close server
        └─ MCP / Streamable HTTP on 127.0.0.1:12450/mcp
@@ -63,12 +63,12 @@ synchronously at request time; nothing is cached.
 
 ### Placement and build
 
-Developed at `~/kancolle/poi-plugin-mcp`, symlinked into poi's plugin
+Developed at `~/kancolle/poi-plugin-game-mcp`, symlinked into poi's plugin
 directory:
 
 ```sh
-ln -s ~/kancolle/poi-plugin-mcp \
-  "$HOME/Library/Application Support/poi/plugins/node_modules/poi-plugin-mcp"
+ln -s ~/kancolle/poi-plugin-game-mcp \
+  "$HOME/Library/Application Support/poi/plugins/node_modules/poi-plugin-game-mcp"
 ```
 
 poi globs plugins from `PLUGIN_PATH/node_modules/poi-plugin-*`
@@ -83,7 +83,7 @@ Ships raw TypeScript with no build step. poi's babel hook transpiles `.es`,
 ### Repo layout
 
 ```
-poi-plugin-mcp/
+poi-plugin-game-mcp/
   package.json          main: index.ts, poiPlugin metadata
   tsconfig.json
   index.ts              poi plugin contract
@@ -137,6 +137,39 @@ dual-published, with a `require` condition in its exports map, so a static
 import would resolve today too — babel would rewrite it to `require` and find
 the CJS build. The dynamic form is kept because it is resolution-agnostic and
 survives the SDK becoming ESM-only later, which a plain `require` would not.
+
+### Health endpoint
+
+`GET /health` returns 200 with the server identity, the live port, and whether
+the store has game data yet:
+
+```json
+{ "status": "ok", "name": "poi-game-mcp", "version": "0.1.0",
+  "port": 12450, "storeReady": true }
+```
+
+`storeReady` is false before login — it reports whether the store has an `info`
+branch, and returns false rather than throwing if reading the store fails. The
+endpoint stays `ok` either way: it answers "is the bridge up", not "is the game
+loaded".
+
+No CORS headers are sent, here or anywhere else. That is deliberate: without
+them a web page cannot read these responses cross-origin, which matters because
+the server is reachable from any process on the machine.
+
+### Port file
+
+The listening port is published to `~/.poi-game-mcp/port` (directory `0700`,
+file `0600`), and the file is removed on close. This is what makes discovery
+possible when the port has been changed from the default.
+
+The path deliberately differs from the unrelated `poi-plugin-mcp` package's
+`~/.poi-mcp/port`, so both plugins can run at once without overwriting each
+other.
+
+Writing the file is a convenience and never a reason to fail startup: if the
+write fails the server logs a warning and carries on listening. `portFile: null`
+disables it, which is what the tests use so they never touch the real path.
 
 ### Status panel
 
@@ -381,9 +414,20 @@ Runner: `node:test` with `tsx`. Standalone repo; no reason to pull in jest.
 ## Installation
 
 ```sh
-ln -s ~/kancolle/poi-plugin-mcp \
-  "$HOME/Library/Application Support/poi/plugins/node_modules/poi-plugin-mcp"
+ln -s ~/kancolle/poi-plugin-game-mcp \
+  "$HOME/Library/Application Support/poi/plugins/node_modules/poi-plugin-game-mcp"
 
-# enable the plugin in poi, then:
-claude mcp add poi --transport http http://127.0.0.1:12450/mcp
+# enable the plugin in poi, then check it is up:
+curl -s http://127.0.0.1:12450/health
+
+# if the port was changed, read it from the port file:
+claude mcp add poi --transport http \
+  "http://127.0.0.1:$(cat ~/.poi-game-mcp/port)/mcp"
 ```
+
+## Naming
+
+The name `poi-plugin-mcp` is already taken on npm by an unrelated plugin (a
+broader bridge that also does screenshots and authenticated input). This package
+is `poi-plugin-game-mcp`, with poi plugin id `poi_game_mcp` and MCP server name
+`poi-game-mcp`, so the two can be installed side by side.
