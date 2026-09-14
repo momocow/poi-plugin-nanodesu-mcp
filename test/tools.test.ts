@@ -245,4 +245,12 @@ describe('poiDescribe', () => {
       assert.equal(result.data.keys?.includes('layout'), false)
     }
   })
+
+  test('advertises an allowlisted plugin branch that has state', () => {
+    const withPlugin = { ...store, ext: { 'poi-plugin-akashic-records': { attack: {} } } }
+    const result = ok(poiDescribe(withPlugin, {}))
+    if (result.ok) {
+      assert.ok(result.data.keys?.includes('ext.poi-plugin-akashic-records'))
+    }
+  })
 })

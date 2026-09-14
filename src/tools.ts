@@ -1,4 +1,4 @@
-import { ALLOWED_ROOTS, resolveStorePath } from './paths.ts'
+import { readableRoots, resolveStorePath } from './paths.ts'
 import { applyQuery, applySelect, isCollection, type QueryResult } from './query.ts'
 import { fitToBytes, toJsonSafe } from './serialize.ts'
 
@@ -150,11 +150,7 @@ export function poiLookup(store: unknown, args: LookupArgs): ToolResult<unknown>
 
 export function poiDescribe(store: unknown, args: DescribeArgs): ToolResult<DescribeData> {
   if (args.path === undefined || args.path === '') {
-    const present =
-      store !== null && typeof store === 'object'
-        ? ALLOWED_ROOTS.filter((root) => root in (store as Record<string, unknown>))
-        : []
-    return { ok: true, data: { path: '(root)', kind: 'object', keys: [...present] } }
+    return { ok: true, data: { path: '(root)', kind: 'object', keys: readableRoots(store) } }
   }
 
   const resolved = resolveStorePath(store, args.path)

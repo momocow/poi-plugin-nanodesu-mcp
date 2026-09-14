@@ -29,6 +29,58 @@ export const DENIED_ROOTS: Record<string, string> = {
   ui: 'UI-local state, no game data',
 }
 
+export const EXT_ROOT = 'ext'
+
+/**
+ * Plugin state under `ext` that may be read, by poi package name (the key poi's
+ * `extendReducer(plugin.packageName, ...)` mounts it under), and why it is safe.
+ *
+ * `ext` as a whole stays denied — its contents are whatever the installed
+ * plugins happen to put there. Each entry here is the record that someone read
+ * a specific plugin's reducers and found plain, serializable data, so adding
+ * one is a deliberate act rather than a side effect of widening a path.
+ *
+ * Note the shape of what lies beneath: poi wraps every plugin reducer in
+ * `combineReducers({ _: reducer })` (`views/redux/reducer-factory.js`, so that
+ * a throwing plugin reducer is isolated), which puts the plugin's own state one
+ * level down at `ext.<packageName>._`. That `_` is poi's, not the plugin's.
+ */
+export const ALLOWED_EXT_PLUGINS: Record<string, string> = {
+  'poi-plugin-akashic-records':
+    'sortie/mission/construction/scrap logs, held as arrays of strings and numbers',
+  // The Logbook EX fork keeps the same reducer shape, plus a `quest` log.
+  'poi-plugin-akashic-records-ex':
+    'sortie/mission/construction/scrap/quest logs, held as arrays of strings and numbers',
+}
+
+const extPath = (plugin: string) => `${EXT_ROOT}.${plugin}`
+
+const readableSummary = () =>
+  [...ALLOWED_ROOTS, ...Object.keys(ALLOWED_EXT_PLUGINS).map(extPath)].join(', ')
+
+/**
+ * The readable branches actually present in a store: allowed roots, plus one
+ * entry per allowlisted plugin that has state. Used to answer "what can I read"
+ * without implying branches the running poi does not have.
+ */
+export function readableRoots(store: unknown): string[] {
+  if (store === null || typeof store !== 'object') {
+    return []
+  }
+  const container = store as Record<string, unknown>
+  const roots: string[] = ALLOWED_ROOTS.filter((root) => root in container)
+
+  const ext = container[EXT_ROOT]
+  if (ext === null || typeof ext !== 'object') {
+    return roots
+  }
+  const plugins = Object.keys(ALLOWED_EXT_PLUGINS)
+    .filter((plugin) => plugin in (ext as Record<string, unknown>))
+    .map(extPath)
+
+  return [...roots, ...plugins]
+}
+
 const MAX_SUGGESTED_KEYS = 20
 
 export function parseFieldPath(path: string): PathSegment[] {
@@ -102,18 +154,35 @@ export function resolveStorePath(store: unknown, path: string): ResolveResult {
   }
 
   const root = String(segments[0])
-  const allowed = ALLOWED_ROOTS.join(', ')
+  const allowed = readableSummary()
 
-  const deniedReason = DENIED_ROOTS[root]
-  if (deniedReason !== undefined) {
-    return {
-      ok: false,
-      error: `root '${root}' is not exposed (${deniedReason}). Allowed roots: ${allowed}`,
+  if (root === EXT_ROOT) {
+    // `ext` is readable only one allowlisted plugin at a time, never whole.
+    const plugin = segments.length > 1 ? String(segments[1]) : undefined
+    if (plugin === undefined) {
+      return {
+        ok: false,
+        error: `root 'ext' cannot be read whole (${DENIED_ROOTS.ext}). Readable paths: ${allowed}`,
+      }
     }
-  }
+    if (!(plugin in ALLOWED_EXT_PLUGINS)) {
+      return {
+        ok: false,
+        error: `plugin state '${extPath(plugin)}' is not exposed. Readable paths: ${allowed}`,
+      }
+    }
+  } else {
+    const deniedReason = DENIED_ROOTS[root]
+    if (deniedReason !== undefined) {
+      return {
+        ok: false,
+        error: `root '${root}' is not exposed (${deniedReason}). Allowed roots: ${allowed}`,
+      }
+    }
 
-  if (!(ALLOWED_ROOTS as readonly string[]).includes(root)) {
-    return { ok: false, error: `unknown root '${root}'. Allowed roots: ${allowed}` }
+    if (!(ALLOWED_ROOTS as readonly string[]).includes(root)) {
+      return { ok: false, error: `unknown root '${root}'. Allowed roots: ${allowed}` }
+    }
   }
 
   let current: unknown = store

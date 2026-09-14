@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test, describe } from 'node:test'
 
-import { parseFieldPath, getByPath, resolveStorePath } from '../src/paths.ts'
+import { parseFieldPath, getByPath, resolveStorePath, readableRoots } from '../src/paths.ts'
 
 describe('parseFieldPath', () => {
   test('splits a dotted path into segments', () => {
@@ -127,5 +127,81 @@ describe('resolveStorePath', () => {
     const result = resolveStorePath(store, '')
     assert.equal(result.ok, false)
     assert.match(result.ok === false ? result.error : '', /empty/i)
+  })
+})
+
+describe('resolveStorePath under ext', () => {
+  const attack = { data: [[1789230676791, '沖ノ島海域(2-4)', '2(道中)']] }
+  const store = {
+    info: { basic: {} },
+    ext: {
+      'poi-plugin-akashic-records': { attack },
+      'poi-plugin-akashic-records-ex': { attack },
+      'poi-plugin-secret': { token: 'nope' },
+    },
+  }
+
+  test('reads an allowlisted plugin branch', () => {
+    const result = resolveStorePath(store, 'ext.poi-plugin-akashic-records.attack')
+    assert.deepEqual(result, { ok: true, value: attack })
+  })
+
+  test('reads a fork listed under its own package name', () => {
+    const result = resolveStorePath(store, 'ext.poi-plugin-akashic-records-ex.attack')
+    assert.deepEqual(result, { ok: true, value: attack })
+  })
+
+  test('does not treat the upstream name as a prefix of the fork', () => {
+    // A plugin is matched by its whole package name, never by prefix: poi keys
+    // ext by package name, and `-ex` is a different package.
+    const onlyFork = { ext: { 'poi-plugin-akashic-records-ex': { attack } } }
+    const result = resolveStorePath(onlyFork, 'ext.poi-plugin-akashic-records.attack')
+    assert.equal(result.ok, false)
+  })
+
+  test('refuses ext as a whole', () => {
+    const result = resolveStorePath(store, 'ext')
+    assert.equal(result.ok, false)
+    assert.match(result.ok === false ? result.error : '', /cannot be read whole/)
+  })
+
+  test('refuses a plugin that is not allowlisted', () => {
+    const result = resolveStorePath(store, 'ext.poi-plugin-secret.token')
+    assert.equal(result.ok, false)
+    assert.match(result.ok === false ? result.error : '', /poi-plugin-secret/)
+  })
+
+  test('names the readable plugin paths when refusing', () => {
+    const result = resolveStorePath(store, 'ext.poi-plugin-secret')
+    assert.match(result.ok === false ? result.error : '', /ext\.poi-plugin-akashic-records/)
+  })
+
+  test('still reports a missing key inside an allowlisted plugin', () => {
+    const result = resolveStorePath(store, 'ext.poi-plugin-akashic-records.nope')
+    assert.equal(result.ok, false)
+    assert.match(result.ok === false ? result.error : '', /attack/)
+  })
+})
+
+describe('readableRoots', () => {
+  test('lists allowed roots and allowlisted plugins that are present', () => {
+    const roots = readableRoots({
+      info: {},
+      layout: {},
+      ext: { 'poi-plugin-akashic-records': {}, 'poi-plugin-secret': {} },
+    })
+    assert.deepEqual(roots, ['info', 'ext.poi-plugin-akashic-records'])
+  })
+
+  test('omits ext entirely when no allowlisted plugin has state', () => {
+    assert.deepEqual(readableRoots({ info: {}, ext: { 'poi-plugin-secret': {} } }), ['info'])
+  })
+
+  test('tolerates a store without ext', () => {
+    assert.deepEqual(readableRoots({ info: {} }), ['info'])
+  })
+
+  test('returns nothing for a non-object store', () => {
+    assert.deepEqual(readableRoots(undefined), [])
   })
 })

@@ -222,13 +222,13 @@ async function buildMcpServer(getStore: () => unknown): Promise<McpServer> {
       title: 'Describe a poi store branch',
       description:
         'Discover what is available at a store path: its kind, element count, keys, and the ' +
-        'field names of a sample element. Call with no path to list the readable roots. ' +
+        'field names of a sample element. Call with no path to list the readable paths. ' +
         'Use this before poi_get rather than guessing at paths or field names.',
       inputSchema: {
         path: z
           .string()
           .optional()
-          .describe('Dot path to describe. Omit to list the readable store roots.'),
+          .describe('Dot path to describe. Omit to list the readable store paths.'),
       },
     },
     adapt(getStore, poiDescribe),
