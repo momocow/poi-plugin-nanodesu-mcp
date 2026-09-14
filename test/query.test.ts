@@ -113,6 +113,18 @@ describe('compileWhere', () => {
     assert.equal(compileWhere('api_slot contains 99999')(ship), false)
   })
 
+  test('tests substrings with contains', () => {
+    assert.equal(compileWhere('api_name contains "長"')(ship), true)
+    assert.equal(compileWhere('api_name contains "雪"')(ship), false)
+  })
+
+  test('does not coerce across types in contains', () => {
+    // "12043" would be a substring of the joined slot list, and 2 a substring
+    // of "長鯨" only after coercion; neither should match.
+    assert.equal(compileWhere('api_name contains 2')(ship), false)
+    assert.equal(compileWhere('api_slot contains "12043"')(ship), false)
+  })
+
   test('tests presence with exists', () => {
     assert.equal(compileWhere('api_lv exists')(ship), true)
     assert.equal(compileWhere('api_nope exists')(ship), false)
@@ -130,6 +142,14 @@ describe('compileWhere', () => {
     test('matches a string column exactly', () => {
       assert.equal(compileWhere('[1] = "沖ノ島海域(2-4)"')(row), true)
       assert.equal(compileWhere('[1] = "鎮守府正面海域(1-1)"')(row), false)
+    })
+
+    test('matches a string column by substring', () => {
+      assert.equal(compileWhere('[1] contains "2-4"')(row), true)
+      assert.equal(compileWhere('[1] contains "1-1"')(row), false)
+      // The point of the substring form: one query across every map's boss
+      // cell, which is numbered differently on each map.
+      assert.equal(compileWhere('[2] contains "Boss"')(row), true)
     })
 
     test('combines index fields with and/or/not', () => {

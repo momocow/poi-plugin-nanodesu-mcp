@@ -464,10 +464,18 @@ function evalNode(node: Node, row: unknown): boolean {
     case 'contains': {
       const left = evalOperand(node.left, row)
       const right = evalOperand(node.right, row)
-      if (right === undefined || !Array.isArray(left)) {
+      if (right === undefined) {
         return false
       }
-      return left.includes(right)
+      if (Array.isArray(left)) {
+        return left.includes(right)
+      }
+      // A string holds substrings the way an array holds elements. Both sides
+      // must be strings: coercing would make `contains 2` quietly match "12".
+      if (typeof left === 'string' && typeof right === 'string') {
+        return left.includes(right)
+      }
+      return false
     }
   }
 }
