@@ -66,6 +66,23 @@ export const ALLOWED_EXT_PLUGINS: Record<string, string> = {
     'accumulated quest list (api_no -> quest with api_state) plus seen/cleared id arrays',
 }
 
+/**
+ * Readable roots that exist only because a poi plugin supplies them, by the
+ * package that does.
+ *
+ * A missing branch here is not a mistyped path — it is a plugin the user has
+ * not installed — and the generic "no key" error sends the caller looking for a
+ * typo instead. `ext.<plugin>` is the same situation, but its package name is
+ * the path segment itself.
+ */
+export const PLUGIN_BACKED_ROOTS: Record<string, string> = {
+  questline: 'poi-plugin-quest-line',
+}
+
+const notInstalled = (what: string, plugin: string) =>
+  `${what} is not available: it is supplied by the '${plugin}' poi plugin, which is not ` +
+  `installed, or has not stored anything yet. Install or enable it in poi to read this branch.`
+
 const extPath = (plugin: string) => `${EXT_ROOT}.${plugin}`
 
 const readableSummary = () =>
@@ -195,6 +212,30 @@ export function resolveStorePath(store: unknown, path: string): ResolveResult {
 
     if (!(ALLOWED_ROOTS as readonly string[]).includes(root)) {
       return { ok: false, error: `unknown root '${root}'. Allowed roots: ${allowed}` }
+    }
+  }
+
+  const rootContainer =
+    store !== null && typeof store === 'object' ? (store as Record<string, unknown>) : undefined
+
+  // A branch a plugin supplies is absent for one overwhelmingly likely reason,
+  // and the generic walk below would report it as a missing key among a list of
+  // unrelated ones.
+  if (root === EXT_ROOT) {
+    const plugin = String(segments[1])
+    const ext = rootContainer?.[EXT_ROOT]
+    const present =
+      ext !== null && typeof ext === 'object' && plugin in (ext as Record<string, unknown>)
+    if (!present) {
+      // Deliberately without the usual "Available keys" list: under `ext` those
+      // are the names of every plugin the user has installed, and only the
+      // allowlisted ones are any caller's business.
+      return { ok: false, error: notInstalled(`plugin state '${extPath(plugin)}'`, plugin) }
+    }
+  } else {
+    const plugin = PLUGIN_BACKED_ROOTS[root]
+    if (plugin !== undefined && rootContainer !== undefined && !(root in rootContainer)) {
+      return { ok: false, error: notInstalled(`root '${root}'`, plugin) }
     }
   }
 

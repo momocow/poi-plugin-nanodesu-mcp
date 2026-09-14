@@ -168,6 +168,21 @@ describe('resolveStorePath under ext', () => {
     assert.deepEqual(result, { ok: true, value: questList })
   })
 
+  test('says which plugin to install when an allowlisted one has no state', () => {
+    const result = resolveStorePath(store, 'ext.poi-plugin-quest-line._.questList')
+    assert.equal(result.ok, false)
+    assert.match(result.ok === false ? result.error : '', /poi-plugin-quest-line/)
+    assert.match(result.ok === false ? result.error : '', /not.*installed/i)
+  })
+
+  test('does not name the plugins the user happens to have installed', () => {
+    // Under ext, "available keys" would be the user's whole plugin list, which
+    // is nobody's business but the allowlisted entries.
+    const result = resolveStorePath(store, 'ext.poi-plugin-quest-line')
+    assert.equal(result.ok, false)
+    assert.doesNotMatch(result.ok === false ? result.error : '', /poi-plugin-secret/)
+  })
+
   test('refuses ext as a whole', () => {
     const result = resolveStorePath(store, 'ext')
     assert.equal(result.ok, false)
@@ -193,6 +208,13 @@ describe('resolveStorePath under ext', () => {
 })
 
 describe('resolveStorePath for a plugin-backed root', () => {
+  test('names the plugin that supplies it rather than reporting a typo', () => {
+    const result = resolveStorePath({ info: {} }, 'questline.quests')
+    assert.equal(result.ok, false)
+    assert.match(result.ok === false ? result.error : '', /poi-plugin-quest-line/)
+    assert.match(result.ok === false ? result.error : '', /not.*installed/i)
+  })
+
   test('reads through normally once the plugin supplies it', () => {
     const quests = { '101': { id: 101 } }
     const result = resolveStorePath({ info: {}, questline: { quests } }, 'questline.quests')

@@ -111,6 +111,16 @@ describe('poiGet', () => {
     }
   })
 
+  test('blames the quest panel, not the game load, for an empty quest list', () => {
+    const empty = { ext: { 'poi-plugin-quest-line': { _: { questList: {} } } } }
+    const result = poiGet(empty, { path: 'ext.poi-plugin-quest-line._.questList' })
+    assert.equal(result.ok, true)
+    assert.match(
+      result.ok && result.data.kind === 'object-map' ? (result.data.hint ?? '') : '',
+      /quest panel/i,
+    )
+  })
+
   test('does not hint when a collection has results', () => {
     const result = poiGet(store, { path: 'info.ships' })
     if (result.ok && result.data.kind === 'object-map') {

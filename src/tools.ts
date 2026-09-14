@@ -61,6 +61,20 @@ const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 const EMPTY_HINT = 'branch is empty — poi may not have loaded the game yet'
 
+/**
+ * What fills a branch decides why it is empty. The quest list is filled by
+ * opening the quest panel in game — poi only ever sees the quests the game was
+ * asked to send — so the default hint would send a caller to wait for a load
+ * that has already happened.
+ */
+const EMPTY_HINTS: Record<string, string> = {
+  'ext.poi-plugin-quest-line._.questList':
+    'branch is empty — open the quest panel in game at least once; the game only sends the ' +
+    'quest list when asked, so poi has not seen one yet',
+}
+
+const emptyHintFor = (path: string): string => EMPTY_HINTS[path] ?? EMPTY_HINT
+
 export function poiGet(store: unknown, args: GetArgs): ToolResult<GetData> {
   const maxBytes = args.maxBytes ?? DEFAULT_MAX_BYTES
   if (!Number.isFinite(maxBytes) || maxBytes <= 0) {
@@ -95,7 +109,7 @@ export function poiGet(store: unknown, args: GetArgs): ToolResult<GetData> {
   const payload = fitted.payload
   if (payload.kind === 'object-map' || payload.kind === 'array') {
     if (payload.total === 0) {
-      return { ok: true, data: { ...payload, hint: EMPTY_HINT } }
+      return { ok: true, data: { ...payload, hint: emptyHintFor(args.path) } }
     }
     if (payload.truncated) {
       const hint =
