@@ -307,7 +307,17 @@ not (api_cond < 40) and api_lv > 1
 - Numbers compare numerically, strings lexicographically. A comparison between
   mismatched types is false.
 - `in` tests membership of the left value in a right-hand array.
-- `contains` tests that a left-hand array contains the right value.
+- `contains` tests that a left-hand array contains the right value, or — when
+  both sides are strings — that the left string contains the right as a
+  substring. Types are never coerced across the two forms: `api_slot contains
+  "12043"` is false for a numeric slot list, and `api_name contains 2` is false
+  rather than matching a stringified name.
+- A row that is itself an array is addressed by position: `[0] > 1`. `[0]` is
+  ambiguous in isolation — it is also a valid one-element array literal — so the
+  lexer resolves it by the preceding token: a field can only follow the start of
+  the expression, `and`/`or`/`not`, or `(`, while a value can only follow an
+  operator, `in`, `contains`, or a comma. This is what lets
+  `[3] in ["出撃", "進撃"]` mean the obvious thing on both sides.
 
 ### `select`
 
