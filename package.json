@@ -1,7 +1,7 @@
 {
-  "name": "poi-plugin-game-mcp",
+  "name": "poi-plugin-chinjufu-mcp",
   "version": "0.1.0",
-  "description": "Expose poi's live game state to agents over MCP (read-only)",
+  "description": "Expose poi's live game state to agents over MCP",
   "main": "index.ts",
   "license": "MIT",
   "scripts": {
@@ -18,10 +18,14 @@
     "typescript": "^5.9.3"
   },
   "poiPlugin": {
-    "title": "Game MCP",
+    "title": "Chinjufu MCP",
     "description": "Expose live game state to agents over MCP",
     "icon": "fa/plug",
     "priority": 100,
-    "id": "poi_game_mcp"
+    "id": "poi_chinjufu_mcp"
+  },
+  "author": {
+    "name": "MomoCow",
+    "url": "https://github.com/momocow"
   }
 }

@@ -1,4 +1,4 @@
-# poi-plugin-game-mcp — Design
+# poi-plugin-chinjufu-mcp — Design
 
 **Date:** 2026-08-09
 **Status:** Approved, ready for implementation planning
@@ -48,7 +48,7 @@ These were considered and explicitly cut:
 
 ```
 poi renderer (main window only)
-  └─ poi-plugin-game-mcp
+  └─ poi-plugin-chinjufu-mcp
        ├─ pluginDidLoad     → start server
        ├─ pluginWillUnload  → close server
        └─ MCP / Streamable HTTP on 127.0.0.1:12450/mcp
@@ -63,12 +63,12 @@ synchronously at request time; nothing is cached.
 
 ### Placement and build
 
-Developed at `~/kancolle/poi-plugin-game-mcp`, symlinked into poi's plugin
+Developed at `~/kancolle/poi-plugin-chinjufu-mcp`, symlinked into poi's plugin
 directory:
 
 ```sh
-ln -s ~/kancolle/poi-plugin-game-mcp \
-  "$HOME/Library/Application Support/poi/plugins/node_modules/poi-plugin-game-mcp"
+ln -s ~/kancolle/poi-plugin-chinjufu-mcp \
+  "$HOME/Library/Application Support/poi/plugins/node_modules/poi-plugin-chinjufu-mcp"
 ```
 
 poi globs plugins from `PLUGIN_PATH/node_modules/poi-plugin-*`
@@ -83,7 +83,7 @@ Ships raw TypeScript with no build step. poi's babel hook transpiles `.es`,
 ### Repo layout
 
 ```
-poi-plugin-game-mcp/
+poi-plugin-chinjufu-mcp/
   package.json          main: index.ts, poiPlugin metadata
   tsconfig.json
   index.ts              poi plugin contract
@@ -157,7 +157,7 @@ Two guards, both added after the hang above:
 the store has game data yet:
 
 ```json
-{ "status": "ok", "name": "poi-game-mcp", "version": "0.1.0",
+{ "status": "ok", "name": "poi-chinjufu-mcp", "version": "0.1.0",
   "port": 12450, "storeReady": true }
 ```
 
@@ -172,7 +172,7 @@ the server is reachable from any process on the machine.
 
 ### Port file
 
-The listening port is published to `~/.poi-game-mcp/port` (directory `0700`,
+The listening port is published to `~/.poi-chinjufu-mcp/port` (directory `0700`,
 file `0600`), and the file is removed on close. This is what makes discovery
 possible when the port has been changed from the default.
 
@@ -427,20 +427,20 @@ Runner: `node:test` with `tsx`. Standalone repo; no reason to pull in jest.
 ## Installation
 
 ```sh
-ln -s ~/kancolle/poi-plugin-game-mcp \
-  "$HOME/Library/Application Support/poi/plugins/node_modules/poi-plugin-game-mcp"
+ln -s ~/kancolle/poi-plugin-chinjufu-mcp \
+  "$HOME/Library/Application Support/poi/plugins/node_modules/poi-plugin-chinjufu-mcp"
 
 # enable the plugin in poi, then check it is up:
 curl -s http://127.0.0.1:12450/health
 
 # if the port was changed, read it from the port file:
 claude mcp add poi --transport http \
-  "http://127.0.0.1:$(cat ~/.poi-game-mcp/port)/mcp"
+  "http://127.0.0.1:$(cat ~/.poi-chinjufu-mcp/port)/mcp"
 ```
 
 ## Naming
 
 The name `poi-plugin-mcp` is already taken on npm by an unrelated plugin (a
 broader bridge that also does screenshots and authenticated input). This package
-is `poi-plugin-game-mcp`, with poi plugin id `poi_game_mcp` and MCP server name
-`poi-game-mcp`, so the two can be installed side by side.
+is `poi-plugin-chinjufu-mcp`, with poi plugin id `poi_chinjufu_mcp` and MCP server name
+`poi-chinjufu-mcp`, so the two can be installed side by side.

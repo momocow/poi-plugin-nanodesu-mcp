@@ -11,7 +11,7 @@ export const PORT_CONFIG_KEY = 'plugin.mcp.port'
  */
 export const START_TIMEOUT_MS = 15_000
 
-const LOG_PREFIX = '[poi-plugin-game-mcp]'
+const LOG_PREFIX = '[poi-plugin-chinjufu-mcp]'
 
 let handle: ServerHandle | undefined
 
