@@ -56,6 +56,29 @@ around every plugin reducer); `ext` as a whole is not readable. Plugins are
 matched by their exact poi package name, so a fork is a separate entry — the
 Logbook EX fork is `ext.poi-plugin-akashic-records-ex`.
 
+`questline` is not a poi branch at all but a read-only overlay of the static
+quest graph that **poi-plugin-quest-line** ships as an asset: `questline.quests`
+maps every quest id to its catalogue entry, including `prereqIds` and `unlocks`
+(the edges), plus `wikiId`, `name`, `category`, `period` and reward fields. It is
+mounted as a root so the same `where`/`select` machinery reads it, and it is
+absent when that plugin is not installed. It is a frozen catalogue of what
+exists in the game, and says nothing about your progress — joining it to live
+state is the agent's job, not this plugin's.
+
+Its text fields are Chinese, so they must be quoted in a `where` — a bare word
+is a fieldpath, and `category = 出击` is a syntax error rather than a match.
+Walk the graph with `prereqIds contains <id>` and `unlocks contains <id>`; the
+49 quests that have no prerequisite are `depth = 0`. Note that `prereqIds = []`
+matches nothing instead of failing: `=` compares scalars, so an array literal on
+the right silently matches no row.
+
+The quest list the game offers is one such branch, and the only place it exists:
+`info.quests` holds the quests you have *accepted*, never the ones merely
+offered. `ext.poi-plugin-quest-line._.questList` maps `api_no` to the quest as
+the game returned it, with `api_state` 1 = offered, 2 = accepted, 3 = awaiting
+reward. It is built from the quest pages you have actually opened in game, so it
+is as complete as your browsing has been — not an authoritative list.
+
 Collections (arrays, or objects keyed by id) support:
 
 - **`where`** — a filter expression: `<field> <op> <value|field>`, combined

@@ -1,4 +1,5 @@
-import { isMainWindow, readPortConfig, resolveGetStore } from './src/poi.ts'
+import { isMainWindow, readAppDataPath, readPortConfig, resolveGetStore } from './src/poi.ts'
+import { loadQuestLineDb, withQuestLine } from './src/questline.ts'
 import { DEFAULT_PORT, startMcpServer, type ServerHandle } from './src/server.ts'
 import { setStatus, StatusPanel } from './src/status.ts'
 import { withTimeout } from './src/timeout.ts'
@@ -45,8 +46,20 @@ export const pluginDidLoad = (): void => {
   const port = readPortConfig(poiWindow, PORT_CONFIG_KEY, DEFAULT_PORT)
   console.log(`${LOG_PREFIX} starting on port ${port}…`)
 
+  // Read once at load: the asset is frozen, and a plugin reload re-reads it.
+  // Its absence is normal — quest-line simply is not installed — so it is
+  // logged and otherwise ignored.
+  const questLine = loadQuestLineDb(readAppDataPath(poiWindow))
+  if (questLine === undefined) {
+    console.log(`${LOG_PREFIX} quest graph unavailable; the 'questline' root is not exposed`)
+  }
+
   withTimeout(
-    startMcpServer({ getStore: () => getStore(), port, onStatus: setStatus }),
+    startMcpServer({
+      getStore: () => withQuestLine(getStore(), questLine),
+      port,
+      onStatus: setStatus,
+    }),
     START_TIMEOUT_MS,
     `startup did not finish within ${START_TIMEOUT_MS} ms`,
   )

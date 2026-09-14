@@ -159,6 +159,15 @@ describe('resolveStorePath under ext', () => {
     assert.equal(result.ok, false)
   })
 
+  test('reads the accumulated quest list, which poi itself does not keep', () => {
+    // `info.quests` only ever holds accepted quests; the offered ones exist
+    // solely in this plugin's merged `questList`.
+    const questList = { '201': { api_no: 201, api_state: 1 } }
+    const withQuests = { ext: { 'poi-plugin-quest-line': { _: { questList } } } }
+    const result = resolveStorePath(withQuests, 'ext.poi-plugin-quest-line._.questList')
+    assert.deepEqual(result, { ok: true, value: questList })
+  })
+
   test('refuses ext as a whole', () => {
     const result = resolveStorePath(store, 'ext')
     assert.equal(result.ok, false)
@@ -180,6 +189,14 @@ describe('resolveStorePath under ext', () => {
     const result = resolveStorePath(store, 'ext.poi-plugin-akashic-records.nope')
     assert.equal(result.ok, false)
     assert.match(result.ok === false ? result.error : '', /attack/)
+  })
+})
+
+describe('resolveStorePath for a plugin-backed root', () => {
+  test('reads through normally once the plugin supplies it', () => {
+    const quests = { '101': { id: 101 } }
+    const result = resolveStorePath({ info: {}, questline: { quests } }, 'questline.quests')
+    assert.deepEqual(result, { ok: true, value: quests })
   })
 })
 

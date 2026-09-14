@@ -14,6 +14,10 @@ export const ALLOWED_ROOTS = [
   'sortie',
   'timers',
   'misc',
+  // Not a branch of poi's store: a read-only overlay of the static quest graph
+  // shipped by poi-plugin-quest-line, mounted here so the same query machinery
+  // reads it. See src/questline.ts. Absent when that plugin is not installed.
+  'questline',
 ] as const
 
 /**
@@ -51,6 +55,15 @@ export const ALLOWED_EXT_PLUGINS: Record<string, string> = {
   // The Logbook EX fork keeps the same reducer shape, plus a `quest` log.
   'poi-plugin-akashic-records-ex':
     'sortie/mission/construction/scrap/quest logs, held as arrays of strings and numbers',
+  // The only source of the quest list the game itself does not keep: poi's
+  // `info.quests` holds the 5 accepted quests and progress records, never the
+  // quests merely *offered*. This plugin's reducer merges every
+  // `api_get_member/questlist` page into `_.questList` (api_no -> quest, with
+  // `api_state` 1=offered 2=accepted 3=awaiting reward), and persists
+  // `seenIds`/`clearedIds` across sessions. All plain objects, number arrays
+  // and strings — no class instances, no DOM, no credentials.
+  'poi-plugin-quest-line':
+    'accumulated quest list (api_no -> quest with api_state) plus seen/cleared id arrays',
 }
 
 const extPath = (plugin: string) => `${EXT_ROOT}.${plugin}`

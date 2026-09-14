@@ -17,6 +17,7 @@ type PoiWindow = {
   isMain?: unknown
   getStore?: unknown
   config?: { get?: unknown }
+  APPDATA_PATH?: unknown
 }
 
 const asPoiWindow = (value: unknown): PoiWindow =>
@@ -35,6 +36,18 @@ export function resolveGetStore(window: unknown): GetStore {
     )
   }
   return getStore as GetStore
+}
+
+/**
+ * poi's data directory (`~/Library/Application Support/poi` on macOS), where
+ * installed plugins and their assets live.
+ *
+ * Absent outside poi, and absent in a poi old enough not to set it — both mean
+ * the same thing to every caller: anything read from disk is unavailable.
+ */
+export function readAppDataPath(window: unknown): string | undefined {
+  const value = asPoiWindow(window).APPDATA_PATH
+  return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
 export function readPortConfig(window: unknown, key: string, fallback: number): number {
