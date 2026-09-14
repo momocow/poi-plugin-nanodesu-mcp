@@ -1,0 +1,13 @@
+{
+  "Chinjufu MCP": "鎮守府 MCP",
+  "Expose live game state to agents over MCP": "透過 MCP 向代理程式公開即時遊戲狀態",
+  "Listening": "監聽中",
+  "Stopped": "已停止",
+  "Error": "錯誤",
+  "MCP server": "MCP 伺服器",
+  "Endpoint": "端點",
+  "Requests": "請求數",
+  "Last request": "最後請求",
+  "none yet": "尚無",
+  "Connect an agent with:": "使用以下指令連接代理程式："
+}

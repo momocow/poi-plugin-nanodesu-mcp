@@ -1,6 +1,9 @@
 import React from 'react'
 
+import { translate } from './i18n.ts'
 import type { ServerStatus } from './server.ts'
+
+const t = (str: string): string => translate(typeof window === 'undefined' ? undefined : window, str)
 
 /**
  * The panel exists so a failed bind is visible. Without it the server would
@@ -69,7 +72,7 @@ export class StatusPanel extends React.Component<
       status.port === undefined ? '—' : `http://127.0.0.1:${status.port}/mcp`
     const lastRequest =
       status.lastRequestAt === undefined
-        ? 'none yet'
+        ? t('none yet')
         : new Date(status.lastRequestAt).toLocaleTimeString()
 
     return React.createElement(
@@ -90,12 +93,12 @@ export class StatusPanel extends React.Component<
         React.createElement(
           'strong',
           { style: { fontSize: 15 } },
-          `MCP server — ${LABELS[status.state]}`,
+          `${t('MCP server')} — ${t(LABELS[status.state])}`,
         ),
       ),
-      row('Endpoint', endpoint),
-      row('Requests', String(status.requestCount)),
-      row('Last request', lastRequest),
+      row(t('Endpoint'), endpoint),
+      row(t('Requests'), String(status.requestCount)),
+      row(t('Last request'), lastRequest),
       status.error === undefined
         ? null
         : React.createElement(
@@ -115,7 +118,7 @@ export class StatusPanel extends React.Component<
         ? React.createElement(
             'div',
             { style: { marginTop: 16, opacity: 0.7 } },
-            React.createElement('div', null, 'Connect an agent with:'),
+            React.createElement('div', null, t('Connect an agent with:')),
             React.createElement(
               'code',
               { style: { userSelect: 'text' } },
