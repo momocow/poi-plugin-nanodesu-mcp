@@ -59,6 +59,41 @@ const isIdentStart = (c: string) => /[A-Za-z_$]/.test(c)
 const isIdentPart = (c: string) => /[A-Za-z0-9_$]/.test(c)
 const isDigit = (c: string) => c >= '0' && c <= '9'
 
+/** End of the `[digits]` run at `i`, or undefined if one does not start there. */
+const indexRunEnd = (expr: string, i: number): number | undefined => {
+  if (expr[i] !== '[') {
+    return undefined
+  }
+  const close = expr.indexOf(']', i)
+  if (close === -1 || !/^\d+$/.test(expr.slice(i + 1, close))) {
+    return undefined
+  }
+  return close + 1
+}
+
+/**
+ * Whether a `[` opens an index fieldpath (`[0] > 1`, for rows that are
+ * positional arrays rather than objects) or an array literal (`api_id in [1]`).
+ *
+ * The two are genuinely ambiguous in isolation — `[0]` is a valid spelling of
+ * either — so only the preceding token can tell them apart, and it always can:
+ * a value follows an operator, `in`, `contains`, or a comma, while a field
+ * follows the start of the expression, `and`/`or`/`not`, or `(`.
+ */
+const opensIndexField = (expr: string, i: number, tokens: Token[]): boolean => {
+  if (indexRunEnd(expr, i) === undefined) {
+    return false
+  }
+  const prev = tokens[tokens.length - 1]
+  if (prev === undefined) {
+    return true
+  }
+  if (prev.type === 'keyword') {
+    return prev.value === 'and' || prev.value === 'or' || prev.value === 'not'
+  }
+  return prev.type === 'punct' && prev.value === '('
+}
+
 function tokenize(expr: string): Token[] {
   const tokens: Token[] = []
   let i = 0
@@ -68,6 +103,46 @@ function tokenize(expr: string): Token[] {
 
     if (/\s/.test(c)) {
       i++
+      continue
+    }
+
+    // Before the punct branch, so a `[` that opens a fieldpath is never taken
+    // for the start of an array literal.
+    if (isIdentStart(c) || (c === '[' && opensIndexField(expr, i, tokens))) {
+      const start = i
+      if (isIdentStart(c)) {
+        while (i < expr.length && isIdentPart(expr[i] as string)) {
+          i++
+        }
+      }
+      // Greedily absorb `.ident` and `[digits]` so a fieldpath lexes as one
+      // token.
+      for (;;) {
+        if (expr[i] === '.' && isIdentStart(expr[i + 1] ?? '')) {
+          i++
+          while (i < expr.length && isIdentPart(expr[i] as string)) {
+            i++
+          }
+          continue
+        }
+        const indexEnd = indexRunEnd(expr, i)
+        if (indexEnd !== undefined) {
+          i = indexEnd
+          continue
+        }
+        break
+      }
+
+      const text = expr.slice(start, i)
+      if (KEYWORDS.has(text)) {
+        tokens.push({ type: 'keyword', value: text as Keyword, pos: start })
+      } else if (text === 'true' || text === 'false') {
+        tokens.push({ type: 'literal', value: text === 'true', pos: start })
+      } else if (text === 'null') {
+        tokens.push({ type: 'literal', value: null, pos: start })
+      } else {
+        tokens.push({ type: 'field', path: parseFieldPath(text), text, pos: start })
+      }
       continue
     }
 
@@ -132,44 +207,6 @@ function tokenize(expr: string): Token[] {
     if (c === '=' || c === '<' || c === '>') {
       tokens.push({ type: 'op', value: c, pos: i })
       i++
-      continue
-    }
-
-    if (isIdentStart(c)) {
-      const start = i
-      while (i < expr.length && isIdentPart(expr[i] as string)) {
-        i++
-      }
-      // Greedily absorb `.ident` and `[digits]` so a fieldpath lexes as one
-      // token; an unattached `[` therefore always starts an array literal.
-      for (;;) {
-        if (expr[i] === '.' && isIdentStart(expr[i + 1] ?? '')) {
-          i++
-          while (i < expr.length && isIdentPart(expr[i] as string)) {
-            i++
-          }
-          continue
-        }
-        if (expr[i] === '[') {
-          const close = expr.indexOf(']', i)
-          if (close !== -1 && /^\d+$/.test(expr.slice(i + 1, close))) {
-            i = close + 1
-            continue
-          }
-        }
-        break
-      }
-
-      const text = expr.slice(start, i)
-      if (KEYWORDS.has(text)) {
-        tokens.push({ type: 'keyword', value: text as Keyword, pos: start })
-      } else if (text === 'true' || text === 'false') {
-        tokens.push({ type: 'literal', value: text === 'true', pos: start })
-      } else if (text === 'null') {
-        tokens.push({ type: 'literal', value: null, pos: start })
-      } else {
-        tokens.push({ type: 'field', path: parseFieldPath(text), text, pos: start })
-      }
       continue
     }
 

@@ -118,6 +118,50 @@ describe('compileWhere', () => {
     assert.equal(compileWhere('api_nope exists')(ship), false)
   })
 
+  describe('rows that are positional arrays', () => {
+    // Shaped like a Logbook sortie log row: [timestamp, map, cell, ..., rank].
+    const row = [1789232781382, '沖ノ島海域(2-4)', '16(Boss点)', '進撃', '勝利S']
+
+    test('compares a leading index field', () => {
+      assert.equal(compileWhere('[0] > 1789000000000')(row), true)
+      assert.equal(compileWhere('[0] < 1789000000000')(row), false)
+    })
+
+    test('matches a string column exactly', () => {
+      assert.equal(compileWhere('[1] = "沖ノ島海域(2-4)"')(row), true)
+      assert.equal(compileWhere('[1] = "鎮守府正面海域(1-1)"')(row), false)
+    })
+
+    test('combines index fields with and/or/not', () => {
+      assert.equal(compileWhere('[0] > 1 and [4] = "勝利S"')(row), true)
+      assert.equal(compileWhere('[4] = "敗北" or [3] = "進撃"')(row), true)
+      assert.equal(compileWhere('not [4] = "敗北"')(row), true)
+    })
+
+    test('reads an index field after an opening parenthesis', () => {
+      assert.equal(compileWhere('([0] > 1 or [0] < 0) and [3] = "進撃"')(row), true)
+    })
+
+    test('tests presence by position', () => {
+      assert.equal(compileWhere('[4] exists')(row), true)
+      assert.equal(compileWhere('[9] exists')(row), false)
+    })
+
+    test('still reads an array literal on the value side of the same expression', () => {
+      assert.equal(compileWhere('[3] in ["出撃", "進撃"]')(row), true)
+      assert.equal(compileWhere('[3] in ["出撃"]')(row), false)
+    })
+
+    test('does not mistake an array literal for a field', () => {
+      assert.equal(compileWhere('api_id in [38761, 43830]')(ship), true)
+      assert.equal(compileWhere('api_id in [1]')(ship), false)
+    })
+
+    test('rejects a bracket that is neither an index nor a literal', () => {
+      assert.throws(() => compileWhere('[foo] > 1'), /expected|unexpected/i)
+    })
+  })
+
   test('treats a present null field as existing', () => {
     assert.equal(compileWhere('api_sally_area exists')(ship), true)
   })

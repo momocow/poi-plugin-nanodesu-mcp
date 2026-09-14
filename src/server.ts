@@ -161,7 +161,8 @@ async function buildMcpServer(getStore: () => unknown): Promise<McpServer> {
           .describe(
             'Filter expression over each element. Grammar: <field> <op> <value|field>, ' +
               'combined with and/or/not and parentheses. Ops: = == != < <= > >= in contains ' +
-              'exists. Fields may be nested or indexed (api_exp[0]). ' +
+              'exists. Fields may be nested or indexed (api_exp[0]), and a row that is itself ' +
+              'an array is addressed by position ([0], [1]). ' +
               'Examples: "api_nowhp < api_maxhp", "api_lv >= 99 and api_locked = 1", ' +
               '"api_ship_id in [487, 213]", "api_sally_area exists".',
           ),
