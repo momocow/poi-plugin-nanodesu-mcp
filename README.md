@@ -26,6 +26,46 @@ redux store。
 整合僅止於「讓它可查」。這個插件不做推論、不產生衍生欄位、不做名稱解析——
 把任務線圖和你的進度接起來、或從編成回推任務是否達成，都是 agent 的工作。
 
+## 插件依賴
+
+除了 poi 本身，這個插件會讀取其他幾個 poi 插件的資料。**全部都是選用的**：
+沒安裝不會出錯，只是該分支不會出現在 `poi_describe` 的根列表，而直接去讀會
+得到一則指名該套件的「未安裝」訊息。
+
+| poi 套件 | 提供的資料 | 取得機制 | 對外路徑 |
+| --- | --- | --- | --- |
+| poi-plugin-quest-line | 累積的任務清單（含 `api_state`）與跨會話的 seen／cleared id | redux ext state（整包） | `ext.poi-plugin-quest-line._` |
+| poi-plugin-quest-line | 靜態任務線圖（任務目錄與前置關係） | **磁碟**上的隨附資產 | `questline.quests` |
+| poi-plugin-battle-detail | 戰鬥索引（`id`／`map`／`route`／`rank`） | redux ext state（**僅 `_.indexes`**） | `ext.poi-plugin-battle-detail._.indexes` |
+| poi-plugin-battle-detail | 單場戰鬥完整記錄（編成、裝備、封包） | **磁碟**上的 gz 檔，依 id 讀 | `poi_battle` 工具 |
+| poi-plugin-akashic-records | 出擊／遠征／建造／解體日誌 | redux ext state（整包） | `ext.poi-plugin-akashic-records._` |
+| poi-plugin-akashic-records-ex | 同上，另加 quest 日誌 | redux ext state（整包） | `ext.poi-plugin-akashic-records-ex._` |
+
+有兩個套件各出現兩次，因為它們是**用兩種不同機制**被依賴的。原因就是上面
+核心概念講的那件事：這兩個插件最有價值的資料根本不進 redux，所以 state 讀一半、
+磁碟讀另一半。
+
+後者的耦合度明顯較高。讀 state 只依賴 poi 的 `extendReducer` 慣例，讀磁碟則
+依賴對方**私有的檔案配置**：
+
+```
+<APPDATA>/plugins/node_modules/poi-plugin-quest-line/assets/quests.json
+<APPDATA>/battle-detail/<id>.json.gz
+```
+
+對方改版搬動檔案，這兩條就會失效。目前的處理是**安靜降級**——載不到就當作沒有，
+絕不讓插件啟動失敗或讓工具呼叫爆掉——但它不會主動告訴你「這條以前是通的，
+現在壞了」。這是已知的取捨。
+
+### 非 poi 的依賴
+
+| 類型 | 內容 |
+| --- | --- |
+| runtime | `@modelcontextprotocol/sdk`、`zod` |
+| dev | `@types/node`、`tsx`、`typescript` |
+| 由 poi 在執行期提供 | `react` —— 刻意**不**安裝，見 `src/poi-modules.d.ts` |
+| poi 的 window 全域 | `getStore`、`isMain`、`config`、`APPDATA_PATH`、`i18n` |
+
 ## 為什麼
 
 poi 本來就把完整的遊戲狀態（艦娘、艦隊、資源、主資料……）放在記憶體裡，
