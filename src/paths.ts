@@ -74,6 +74,30 @@ export const ALLOWED_EXT_PLUGINS: Record<string, string> = {
   // and strings — no class instances, no DOM, no credentials.
   'poi-plugin-quest-line':
     'accumulated quest list (api_no -> quest with api_state) plus seen/cleared id arrays',
+  // Readable only in part — see ALLOWED_EXT_SUBPATHS.
+  'poi-plugin-battle-detail':
+    'flat index of every saved battle: id, map, route, rank, and the id naming its record file',
+}
+
+/**
+ * Plugins whose state is readable only under specific sub-paths.
+ *
+ * A plugin is normally allowlisted whole, on the strength of having read its
+ * reducers. That breaks down when one reducer in a combineReducers holds
+ * something unserializable: battle-detail's `_.indexes` is a plain array, but
+ * its sibling `_.sortieIndexes` is an Immutable.js List, whose own enumerable
+ * properties are internals (`size`, `_root`, `_tail`, ...) rather than data.
+ * Emitting that would be noise at best.
+ *
+ * Nothing is lost by the narrowing: `sortieIndexes` is derived — the same
+ * battles grouped into sorties, which is recomputable from `indexes` plus the
+ * route graph already readable at `fcd.map`.
+ *
+ * A prefix here permits itself and anything beneath it. A plugin absent from
+ * this map stays readable whole.
+ */
+export const ALLOWED_EXT_SUBPATHS: Record<string, string[]> = {
+  'poi-plugin-battle-detail': ['_.indexes'],
 }
 
 /**
@@ -116,7 +140,14 @@ export function readableRoots(store: unknown): string[] {
   }
   const plugins = Object.keys(ALLOWED_EXT_PLUGINS)
     .filter((plugin) => plugin in (ext as Record<string, unknown>))
-    .map(extPath)
+    // A partly-readable plugin is advertised by what is actually readable, not
+    // by a path that would be refused.
+    .flatMap((plugin) => {
+      const only = ALLOWED_EXT_SUBPATHS[plugin]
+      return only === undefined
+        ? [extPath(plugin)]
+        : only.map((sub) => `${extPath(plugin)}.${sub}`)
+    })
 
   return [...roots, ...plugins]
 }
@@ -265,6 +296,26 @@ export function resolveStorePath(store: unknown, path: string): ResolveResult {
       // are the names of every plugin the user has installed, and only the
       // allowlisted ones are any caller's business.
       return { ok: false, error: notInstalled(`plugin state '${extPath(plugin)}'`, plugin) }
+    }
+
+    const only = ALLOWED_EXT_SUBPATHS[plugin]
+    if (only !== undefined) {
+      const rest = segments.slice(2).map(String)
+      const permitted = only.some((prefix) =>
+        parseFieldPath(prefix)
+          .map(String)
+          .every((want, i) => rest[i] === want),
+      )
+      if (!permitted) {
+        const readable = only.map((sub) => `${extPath(plugin)}.${sub}`).join(', ')
+        return {
+          ok: false,
+          error:
+            `'${path}' is not exposed: only part of ${plugin}'s state is readable, ` +
+            `because the rest holds values that do not survive serialization. ` +
+            `Readable here: ${readable}`,
+        }
+      }
     }
   } else {
     const plugin = PLUGIN_BACKED_ROOTS[root]

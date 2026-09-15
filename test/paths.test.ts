@@ -254,6 +254,49 @@ describe('resolveStorePath under ext', () => {
   })
 })
 
+describe('resolveStorePath for a partly-readable plugin', () => {
+  const indexes = [{ id: 1789232781382, map: '2-4', rank: 'S' }]
+  const store = {
+    info: {},
+    ext: {
+      'poi-plugin-battle-detail': { _: { indexes, sortieIndexes: { size: 2, _root: {} }, ui: {} } },
+    },
+  }
+
+  test('reads the allowlisted sub-path', () => {
+    const result = resolveStorePath(store, 'ext.poi-plugin-battle-detail._.indexes')
+    assert.deepEqual(result, { ok: true, value: indexes })
+  })
+
+  test('reads beneath the allowlisted sub-path', () => {
+    const result = resolveStorePath(store, 'ext.poi-plugin-battle-detail._.indexes[0].rank')
+    assert.deepEqual(result, { ok: true, value: 'S' })
+  })
+
+  test('refuses the sibling that does not survive serialization', () => {
+    // sortieIndexes is an Immutable.js List, whose own properties are internals.
+    const result = resolveStorePath(store, 'ext.poi-plugin-battle-detail._.sortieIndexes')
+    assert.equal(result.ok, false)
+    assert.match(result.ok === false ? result.error : '', /only part of/i)
+  })
+
+  test('refuses the plugin state as a whole', () => {
+    const result = resolveStorePath(store, 'ext.poi-plugin-battle-detail._')
+    assert.equal(result.ok, false)
+  })
+
+  test('names what is readable when refusing', () => {
+    const result = resolveStorePath(store, 'ext.poi-plugin-battle-detail._.ui')
+    assert.match(result.ok === false ? result.error : '', /_\.indexes/)
+  })
+
+  test('advertises the readable sub-path, not the plugin', () => {
+    const roots = readableRoots(store)
+    assert.ok(roots.includes('ext.poi-plugin-battle-detail._.indexes'))
+    assert.equal(roots.includes('ext.poi-plugin-battle-detail'), false)
+  })
+})
+
 describe('resolveStorePath rejects a wildcard', () => {
   test('[] projects across an array and names no branch', () => {
     const result = resolveStorePath({ info: { ships: [] } }, 'info.ships[].api_lv')
