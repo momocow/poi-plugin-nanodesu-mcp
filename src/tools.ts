@@ -1,4 +1,5 @@
 import { BATTLE_DETAIL_PACKAGE, type ReadBattle } from './battles.ts'
+import { describeFields, timeRangeAt, type TimeRange } from './fields.ts'
 import { readableRoots, resolveStorePath } from './paths.ts'
 import { applyQuery, applySelect, isCollection, type QueryResult } from './query.ts'
 import { fitToBytes, toJsonSafe } from './serialize.ts'
@@ -28,6 +29,19 @@ export type DescribeData = {
   keys?: string[]
   sampleKeys?: string[]
   sampleFields?: string[]
+  /**
+   * What the path's own data cannot say: the meaning of positional columns, or
+   * a field name that means something else here than it does elsewhere.
+   */
+  note?: string
+  /**
+   * The span of time this collection covers, when its rows carry an instant.
+   *
+   * Reported so a caller can tell an absence from a blind spot without probing
+   * for the edge: a filter that matches nothing means one thing inside this
+   * range and quite another outside it.
+   */
+  timeRange?: TimeRange
 }
 
 export type ToolResult<T> = { ok: true; data: T } | { ok: false; error: string }
@@ -124,19 +138,29 @@ export function poiGet(store: unknown, args: GetArgs): ToolResult<GetData> {
   }
 
   const payload = fitted.payload
+  const hints: string[] = []
+
+  // Described from the value as stored, not as returned: where/select/limit
+  // change the shape of this response, never the layout being described. Sent
+  // on every read of an annotated path, because the caller who most needs the
+  // column names is the one who did not think to call poi_describe first.
+  const described = describeFields(args.path, resolved.value)
+  if (described.note !== undefined) {
+    hints.push(described.note)
+  }
+
   if (payload.kind === 'object-map' || payload.kind === 'array') {
     if (payload.total === 0) {
-      return { ok: true, data: { ...payload, hint: emptyHintFor(args.path) } }
-    }
-    if (payload.truncated) {
-      const hint =
+      hints.push(emptyHintFor(args.path))
+    } else if (payload.truncated) {
+      hints.push(
         `showing ${payload.returned} of ${payload.total} — narrow with where/select, ` +
-        `or raise limit/maxBytes`
-      return { ok: true, data: { ...payload, hint } }
+          `or raise limit/maxBytes`,
+      )
     }
   }
 
-  return { ok: true, data: payload }
+  return { ok: true, data: hints.length > 0 ? { ...payload, hint: hints.join('; ') } : payload }
 }
 
 export function poiLookup(store: unknown, args: LookupArgs): ToolResult<unknown> {
@@ -289,10 +313,22 @@ export function poiDescribe(store: unknown, args: DescribeArgs): ToolResult<Desc
       ? Object.keys(sample).slice(0, MAX_DESCRIBE_KEYS)
       : undefined
 
+  // Known names win over read-off-the-sample ones. For a positional row the
+  // latter are the indices themselves — the shape restated, with the meaning
+  // still missing, which is what sends a caller off to guess.
+  const described = describeFields(path, value)
+
   if (Array.isArray(value)) {
     return {
       ok: true,
-      data: { path, kind: 'array', total: value.length, sampleFields: fieldsOf(value[0]) },
+      data: {
+        path,
+        kind: 'array',
+        total: value.length,
+        sampleFields: described.fields ?? fieldsOf(value[0]),
+        note: described.note,
+        timeRange: timeRangeAt(path, value),
+      },
     }
   }
 
@@ -308,12 +344,18 @@ export function poiDescribe(store: unknown, args: DescribeArgs): ToolResult<Desc
         total: keys.length,
         sampleKeys: keys.slice(0, MAX_DESCRIBE_KEYS),
         sampleFields:
-          firstKey === undefined
+          described.fields ??
+          (firstKey === undefined
             ? undefined
-            : fieldsOf((value as Record<string, unknown>)[firstKey]),
+            : fieldsOf((value as Record<string, unknown>)[firstKey])),
+        note: described.note,
+        timeRange: timeRangeAt(path, value),
       },
     }
   }
 
-  return { ok: true, data: { path, kind: 'object', keys: keys.slice(0, MAX_DESCRIBE_KEYS) } }
+  return {
+    ok: true,
+    data: { path, kind: 'object', keys: keys.slice(0, MAX_DESCRIBE_KEYS), note: described.note },
+  }
 }

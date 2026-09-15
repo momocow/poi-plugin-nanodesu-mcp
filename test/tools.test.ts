@@ -328,3 +328,91 @@ describe('poiDescribe', () => {
     }
   })
 })
+
+describe('positional field names', () => {
+  const attackPath = 'ext.poi-plugin-akashic-records-ex._.attack.data'
+  const attackRow = (width: number) => Array.from({ length: width }, (_, i) => String(i))
+  const withAkashic = (rows: unknown[]) => ({
+    ...store,
+    ext: { 'poi-plugin-akashic-records-ex': { _: { attack: { data: rows } } } },
+  })
+
+  test('describe names the resource slots instead of reporting indices', () => {
+    const result = ok(poiDescribe(store, { path: 'info.resources' }))
+    if (result.ok) {
+      assert.deepEqual(result.data.sampleFields?.slice(4, 6), ['instantBuild', 'instantRepair'])
+    }
+  })
+
+  test('get names them too, without being asked to describe first', () => {
+    const result = ok(poiGet(store, { path: 'info.resources' }))
+    if (result.ok) {
+      assert.match(result.data.hint ?? '', /\[5\] instantRepair/)
+    }
+  })
+
+  test('get warns that repairs hold a roster id, not a master ship id', () => {
+    const result = ok(poiGet(store, { path: 'info.repairs' }))
+    if (result.ok) {
+      assert.match(result.data.hint ?? '', /roster/i)
+    }
+  })
+
+  test('describe names akashic log columns', () => {
+    const result = ok(poiDescribe(withAkashic([attackRow(12)]), { path: attackPath }))
+    if (result.ok) {
+      assert.equal(result.data.sampleFields?.[0], 'time')
+      assert.equal(result.data.sampleFields?.[10], 'mvp')
+    }
+  })
+
+  test('describe reports a changed layout rather than mislabelling it', () => {
+    const result = ok(poiDescribe(withAkashic([attackRow(13)]), { path: attackPath }))
+    if (result.ok) {
+      assert.equal(result.data.sampleFields?.includes('mvp'), false)
+      assert.match(result.data.note ?? '', /changed/)
+    }
+  })
+
+  test('the column names survive a select that reshapes the rows', () => {
+    const result = ok(poiGet(withAkashic([attackRow(12)]), { path: attackPath, select: ['[0]'] }))
+    if (result.ok) {
+      assert.match(result.data.hint ?? '', /\[0\] time/)
+    }
+  })
+
+  test('an annotated but empty log keeps both hints', () => {
+    const result = ok(poiGet(withAkashic([]), { path: attackPath }))
+    if (result.ok) {
+      assert.match(result.data.hint ?? '', /\[0\] time/)
+      assert.match(result.data.hint ?? '', /empty/)
+    }
+  })
+
+  test('leaves unannotated paths alone', () => {
+    const result = ok(poiGet(store, { path: 'info.ships', limit: 500 }))
+    if (result.ok) {
+      assert.equal(result.data.hint, undefined)
+    }
+  })
+
+  test('describe reports how far back a log reaches', () => {
+    const rows = [
+      [Date.UTC(2026, 8, 14), ...Array.from({ length: 11 }, () => '')],
+      [Date.UTC(2026, 7, 31), ...Array.from({ length: 11 }, () => '')],
+    ]
+    const result = ok(poiDescribe(withAkashic(rows), { path: attackPath }))
+    if (result.ok) {
+      assert.equal(result.data.timeRange?.from, new Date(Date.UTC(2026, 7, 31)).toISOString())
+      assert.equal(result.data.timeRange?.to, new Date(Date.UTC(2026, 8, 14)).toISOString())
+      assert.equal(result.data.timeRange?.min, Date.UTC(2026, 7, 31))
+    }
+  })
+
+  test('describe claims no time span for a branch without one', () => {
+    const result = ok(poiDescribe(store, { path: 'info.ships' }))
+    if (result.ok) {
+      assert.equal(result.data.timeRange, undefined)
+    }
+  })
+})

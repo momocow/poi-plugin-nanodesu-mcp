@@ -239,7 +239,12 @@ async function buildMcpServer(
       inputSchema: {
         kind: z
           .enum(Object.keys(LOOKUP_KINDS) as [string, ...string[]])
-          .describe('Which master table to read.'),
+          .describe(
+            'Which master table to read. Each table has its own id space: useitems ids in ' +
+              'particular are unrelated to the positions of info.resources, and order ' +
+              'instant-repair and instant-build the other way round, so an id from one is a ' +
+              'valid-looking wrong answer in the other.',
+          ),
         ids: z.array(z.number()).describe('The ids to resolve. Ids not present are omitted.'),
         select: z.array(z.string()).optional().describe('Fieldpaths to keep from each record.'),
       },
@@ -292,7 +297,14 @@ async function buildMcpServer(
       description:
         'Discover what is available at a store path: its kind, element count, keys, and the ' +
         'field names of a sample element. Call with no path to list the readable paths. ' +
-        'Use this before poi_get rather than guessing at paths or field names.',
+        'Use this before poi_get rather than guessing at paths or field names. ' +
+        'For paths whose rows are positional arrays (info.resources, the akashic-records logs) ' +
+        'it returns the real column names in place of "0", "1", ... , and a note where a field ' +
+        'means something here that it does not mean elsewhere. For a log whose rows carry a ' +
+        'timestamp it also returns timeRange: the oldest and newest instant the branch actually ' +
+        'holds, both as stored and as ISO. Read it before concluding anything from an empty ' +
+        'result — outside that range a filter matches nothing because the data does not reach ' +
+        'that far, which is not the same as nothing having happened.',
       inputSchema: {
         path: z
           .string()
