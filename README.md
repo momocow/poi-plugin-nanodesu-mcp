@@ -1,6 +1,6 @@
 # poi-plugin-chinjufu-mcp
 
-一個 [poi](https://github.com/poooi/poi) 插件，把 poi 當下的艦隊收藏品遊戲狀態
+一個 [poi](https://github.com/poooi/poi) 插件，把 poi 當下的 KanColle 遊戲狀態
 以唯讀工具的形式開放給 MCP 客戶端（Claude Code，或任何說 MCP 的 agent）。
 不必去撈 poi 的快取檔，也沒有過期問題：每一次呼叫讀的都是遊戲正在跑的那個
 redux store。
