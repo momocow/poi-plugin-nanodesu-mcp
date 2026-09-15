@@ -1,4 +1,14 @@
-export type PathSegment = string | number
+/**
+ * `[]` in a fieldpath: map over an array rather than index into it.
+ *
+ * Without it a projection can only name one element at a time, which is no
+ * projection at all for the shapes that most need one — six ships each holding
+ * four pieces of equipment needs 24 paths to say "the equipment names", and
+ * selecting the whole branch instead costs 18 KB where the answer is 800 bytes.
+ */
+export const WILDCARD: unique symbol = Symbol('[]')
+
+export type PathSegment = string | number | typeof WILDCARD
 
 export type ResolveResult = { ok: true; value: unknown } | { ok: false; error: string }
 
@@ -128,10 +138,15 @@ export function parseFieldPath(path: string): PathSegment[] {
         throw new Error(`unclosed '[' in path: ${path}`)
       }
       const inner = path.slice(i + 1, close)
-      if (!/^\d+$/.test(inner)) {
-        throw new Error(`array index must be an integer, got '[${inner}]' in path: ${path}`)
+      if (inner === '') {
+        segments.push(WILDCARD)
+      } else if (!/^\d+$/.test(inner)) {
+        throw new Error(
+          `array index must be an integer or empty for '[]', got '[${inner}]' in path: ${path}`,
+        )
+      } else {
+        segments.push(Number(inner))
       }
-      segments.push(Number(inner))
       i = close + 1
     } else {
       let end = i
@@ -159,12 +174,26 @@ export function parseFieldPath(path: string): PathSegment[] {
 
 export function getByPath(value: unknown, segments: PathSegment[]): unknown {
   let current = value
-  for (const segment of segments) {
+
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i]
+
+    if (segment === WILDCARD) {
+      // The rest of the path is applied to every element, so the result keeps
+      // the array's shape: a hole stays a hole rather than shifting the rest.
+      if (!Array.isArray(current)) {
+        return undefined
+      }
+      const rest = segments.slice(i + 1)
+      return current.map((item) => getByPath(item, rest))
+    }
+
     if (current === null || typeof current !== 'object') {
       return undefined
     }
     current = (current as Record<string, unknown>)[String(segment)]
   }
+
   return current
 }
 
@@ -181,6 +210,11 @@ export function resolveStorePath(store: unknown, path: string): ResolveResult {
     segments = parseFieldPath(path)
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) }
+  }
+
+  if (segments.includes(WILDCARD)) {
+    // `[]` projects across an array; it names no single branch to resolve.
+    return { ok: false, error: `'[]' is only valid in select, not in a store path: ${path}` }
   }
 
   const root = String(segments[0])

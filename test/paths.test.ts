@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict'
 import { test, describe } from 'node:test'
 
-import { parseFieldPath, getByPath, resolveStorePath, readableRoots } from '../src/paths.ts'
+import {
+  parseFieldPath,
+  getByPath,
+  resolveStorePath,
+  readableRoots,
+  WILDCARD,
+} from '../src/paths.ts'
 
 describe('parseFieldPath', () => {
   test('splits a dotted path into segments', () => {
@@ -35,6 +41,47 @@ describe('parseFieldPath', () => {
 
   test('rejects an unclosed bracket', () => {
     assert.throws(() => parseFieldPath('api_exp[0'), /unclosed/i)
+  })
+
+  test('parses [] as a wildcard distinct from an index', () => {
+    const segments = parseFieldPath('main[].api_lv')
+    assert.equal(segments[1], WILDCARD)
+    assert.deepEqual(parseFieldPath('main[0].api_lv')[1], 0)
+  })
+
+  test('still rejects a non-numeric index', () => {
+    assert.throws(() => parseFieldPath('main[x]'), /integer/i)
+  })
+})
+
+describe('getByPath with []', () => {
+  const battle = {
+    fleet: {
+      main: [
+        { api_lv: 97, poi_slot: [{ api_name: '20.3cm' }, { api_name: '甲標的' }] },
+        { api_lv: 138, poi_slot: [{ api_name: '流星改' }] },
+      ],
+    },
+  }
+
+  test('maps over an array instead of indexing it', () => {
+    assert.deepEqual(getByPath(battle, parseFieldPath('fleet.main[].api_lv')), [97, 138])
+  })
+
+  test('maps through nested arrays', () => {
+    assert.deepEqual(getByPath(battle, parseFieldPath('fleet.main[].poi_slot[].api_name')), [
+      ['20.3cm', '甲標的'],
+      ['流星改'],
+    ])
+  })
+
+  test('keeps a hole rather than shifting the rest', () => {
+    const holed = { main: [{ api_lv: 1 }, {}, { api_lv: 3 }] }
+    assert.deepEqual(getByPath(holed, parseFieldPath('main[].api_lv')), [1, undefined, 3])
+  })
+
+  test('returns undefined when the branch is not an array', () => {
+    assert.equal(getByPath({ main: { api_lv: 1 } }, parseFieldPath('main[].api_lv')), undefined)
   })
 })
 
@@ -204,6 +251,14 @@ describe('resolveStorePath under ext', () => {
     const result = resolveStorePath(store, 'ext.poi-plugin-akashic-records.nope')
     assert.equal(result.ok, false)
     assert.match(result.ok === false ? result.error : '', /attack/)
+  })
+})
+
+describe('resolveStorePath rejects a wildcard', () => {
+  test('[] projects across an array and names no branch', () => {
+    const result = resolveStorePath({ info: { ships: [] } }, 'info.ships[].api_lv')
+    assert.equal(result.ok, false)
+    assert.match(result.ok === false ? result.error : '', /select/i)
   })
 })
 

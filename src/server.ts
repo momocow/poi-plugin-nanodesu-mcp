@@ -170,7 +170,10 @@ async function buildMcpServer(getStore: () => unknown): Promise<McpServer> {
         select: z
           .array(z.string())
           .optional()
-          .describe('Fieldpaths to keep. The path string is used as the output key.'),
+          .describe(
+            'Fieldpaths to keep. The path string is used as the output key. `[]` maps over an ' +
+              'array rather than indexing it, so "api_ship[].api_lv" keeps one level per ship.',
+          ),
         limit: z
           .number()
           .int()
