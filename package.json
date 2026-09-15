@@ -1,5 +1,5 @@
 {
-  "name": "poi-plugin-chinjufu-mcp",
+  "name": "poi-plugin-nanodesu-mcp",
   "version": "0.1.0",
   "description": "Expose poi's live game state to agents over MCP",
   "main": "index.ts",
@@ -18,11 +18,11 @@
     "typescript": "^5.9.3"
   },
   "poiPlugin": {
-    "title": "Chinjufu MCP",
+    "title": "なのです",
     "description": "Expose live game state to agents over MCP",
     "icon": "fa/plug",
     "priority": 100,
-    "id": "poi_chinjufu_mcp"
+    "id": "poi_nanodesu_mcp"
   },
   "author": {
     "name": "MomoCow",

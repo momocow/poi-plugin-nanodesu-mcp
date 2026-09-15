@@ -1,5 +1,4 @@
 {
-  "Chinjufu MCP": "鎮守府 MCP",
   "Expose live game state to agents over MCP": "透過 MCP 向代理程式公開即時遊戲狀態",
   "Listening": "監聽中",
   "Stopped": "已停止",

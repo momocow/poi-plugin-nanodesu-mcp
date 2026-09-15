@@ -22,7 +22,7 @@ import {
 } from './tools.ts'
 import { passthroughValidator } from './validator.ts'
 
-export const SERVER_NAME = 'poi-chinjufu-mcp'
+export const SERVER_NAME = 'poi-nanodesu-mcp'
 export const SERVER_VERSION = '0.1.0'
 export const DEFAULT_PORT = 12450
 
@@ -35,7 +35,7 @@ const MAX_BODY_BYTES = 1024 * 1024
  * `poi-plugin-mcp` package, and both plugins should be able to run at once
  * without overwriting each other's file.
  */
-export const defaultPortFile = (): string => join(homedir(), '.poi-chinjufu-mcp', 'port')
+export const defaultPortFile = (): string => join(homedir(), '.poi-nanodesu-mcp', 'port')
 
 export type ServerStatus = {
   state: 'stopped' | 'listening' | 'error'
@@ -396,7 +396,7 @@ export async function startMcpServer(options: ServerOptions): Promise<ServerHand
     const port = typeof address === 'object' && address !== null ? address.port : 0
     handle(req, res, port).catch((e: unknown) => {
       // Never let a request failure escape into the renderer.
-      console.error('[poi-plugin-chinjufu-mcp] request failed:', e)
+      console.error('[poi-plugin-nanodesu-mcp] request failed:', e)
       if (!res.headersSent) {
         res.writeHead(500, { 'content-type': 'text/plain' })
       }
@@ -436,7 +436,7 @@ export async function startMcpServer(options: ServerOptions): Promise<ServerHand
           mkdirSync(dirname(portFile), { recursive: true, mode: 0o700 })
           writeFileSync(portFile, `${port}\n`, { encoding: 'utf8', mode: 0o600 })
         } catch (e) {
-          console.warn('[poi-plugin-chinjufu-mcp] could not write the port file:', e)
+          console.warn('[poi-plugin-nanodesu-mcp] could not write the port file:', e)
         }
       }
 

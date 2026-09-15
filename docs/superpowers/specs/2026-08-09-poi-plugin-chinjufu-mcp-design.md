@@ -1,4 +1,4 @@
-# poi-plugin-chinjufu-mcp — Design
+# poi-plugin-nanodesu-mcp — Design
 
 **Date:** 2026-08-09
 **Status:** Approved, ready for implementation planning
@@ -48,7 +48,7 @@ These were considered and explicitly cut:
 
 ```
 poi renderer (main window only)
-  └─ poi-plugin-chinjufu-mcp
+  └─ poi-plugin-nanodesu-mcp
        ├─ pluginDidLoad     → start server
        ├─ pluginWillUnload  → close server
        └─ MCP / Streamable HTTP on 127.0.0.1:12450/mcp
@@ -63,12 +63,12 @@ synchronously at request time; nothing is cached.
 
 ### Placement and build
 
-Developed at `~/kancolle/poi-plugin-chinjufu-mcp`, symlinked into poi's plugin
+Developed at `~/kancolle/poi-plugin-nanodesu-mcp`, symlinked into poi's plugin
 directory:
 
 ```sh
-ln -s ~/kancolle/poi-plugin-chinjufu-mcp \
-  "$HOME/Library/Application Support/poi/plugins/node_modules/poi-plugin-chinjufu-mcp"
+ln -s ~/kancolle/poi-plugin-nanodesu-mcp \
+  "$HOME/Library/Application Support/poi/plugins/node_modules/poi-plugin-nanodesu-mcp"
 ```
 
 poi globs plugins from `PLUGIN_PATH/node_modules/poi-plugin-*`
@@ -83,7 +83,7 @@ Ships raw TypeScript with no build step. poi's babel hook transpiles `.es`,
 ### Repo layout
 
 ```
-poi-plugin-chinjufu-mcp/
+poi-plugin-nanodesu-mcp/
   package.json          main: index.ts, poiPlugin metadata
   tsconfig.json
   index.ts              poi plugin contract
@@ -157,7 +157,7 @@ Two guards, both added after the hang above:
 the store has game data yet:
 
 ```json
-{ "status": "ok", "name": "poi-chinjufu-mcp", "version": "0.1.0",
+{ "status": "ok", "name": "poi-nanodesu-mcp", "version": "0.1.0",
   "port": 12450, "storeReady": true }
 ```
 
@@ -172,7 +172,7 @@ the server is reachable from any process on the machine.
 
 ### Port file
 
-The listening port is published to `~/.poi-chinjufu-mcp/port` (directory `0700`,
+The listening port is published to `~/.poi-nanodesu-mcp/port` (directory `0700`,
 file `0600`), and the file is removed on close. This is what makes discovery
 possible when the port has been changed from the default.
 
@@ -437,20 +437,26 @@ Runner: `node:test` with `tsx`. Standalone repo; no reason to pull in jest.
 ## Installation
 
 ```sh
-ln -s ~/kancolle/poi-plugin-chinjufu-mcp \
-  "$HOME/Library/Application Support/poi/plugins/node_modules/poi-plugin-chinjufu-mcp"
+ln -s ~/kancolle/poi-plugin-nanodesu-mcp \
+  "$HOME/Library/Application Support/poi/plugins/node_modules/poi-plugin-nanodesu-mcp"
 
 # enable the plugin in poi, then check it is up:
 curl -s http://127.0.0.1:12450/health
 
 # if the port was changed, read it from the port file:
 claude mcp add poi --transport http \
-  "http://127.0.0.1:$(cat ~/.poi-chinjufu-mcp/port)/mcp"
+  "http://127.0.0.1:$(cat ~/.poi-nanodesu-mcp/port)/mcp"
 ```
 
 ## Naming
 
 The name `poi-plugin-mcp` is already taken on npm by an unrelated plugin (a
 broader bridge that also does screenshots and authenticated input). This package
-is `poi-plugin-chinjufu-mcp`, with poi plugin id `poi_chinjufu_mcp` and MCP server name
-`poi-chinjufu-mcp`, so the two can be installed side by side.
+is `poi-plugin-nanodesu-mcp`, with poi plugin id `poi_nanodesu_mcp` and MCP server name
+`poi-nanodesu-mcp`, so the two can be installed side by side.
+
+Renamed from `poi-plugin-chinjufu-mcp` (plugin id `poi_chinjufu_mcp`, server name
+`poi-chinjufu-mcp`, published port file `~/.poi-chinjufu-mcp/port`, display title
+"Chinjufu MCP" / 鎮守府 MCP). The display title is now `なのです`, kana in every
+locale, so `i18n/*.json` no longer carries a title entry. This file keeps its
+original dated name on purpose — it is the 2026-08-09 record, not a live index.

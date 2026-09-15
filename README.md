@@ -1,4 +1,4 @@
-# poi-plugin-chinjufu-mcp
+# poi-plugin-nanodesu-mcp
 
 一個 [poi](https://github.com/poooi/poi) 插件，把 poi 當下的 KanColle 遊戲狀態
 以唯讀工具的形式開放給 MCP 客戶端（Claude Code，或任何說 MCP 的 agent）。
@@ -88,8 +88,8 @@ poi_battle ids=[...] select=["fleet.main[].api_ship_id"]
 把這個 repo 用 symlink 掛進 poi 的插件目錄（沒有發佈到 npm）：
 
 ```sh
-ln -s /path/to/poi-plugin-chinjufu-mcp \
-  "$HOME/Library/Application Support/poi/plugins/node_modules/poi-plugin-chinjufu-mcp"
+ln -s /path/to/poi-plugin-nanodesu-mcp \
+  "$HOME/Library/Application Support/poi/plugins/node_modules/poi-plugin-nanodesu-mcp"
 ```
 
 然後在 poi 裡重載插件（或重啟 poi）。本專案以原始 TypeScript 發佈、沒有建置
@@ -103,7 +103,7 @@ ln -s /path/to/poi-plugin-chinjufu-mcp \
 claude mcp add poi --transport http http://127.0.0.1:12450/mcp
 ```
 
-實際綁定的連接埠也會寫到 `~/.poi-chinjufu-mcp/port`，方便需要以程式探索的情境。
+實際綁定的連接埠也會寫到 `~/.poi-nanodesu-mcp/port`，方便需要以程式探索的情境。
 
 插件的 UI 字串透過 poi 自己的 i18n 機制翻譯（見 `i18n/*.json`），已包含繁體
 中文；其他語系會回退到英文原文。

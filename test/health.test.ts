@@ -74,7 +74,7 @@ describe('port file', () => {
   let directory: string
 
   before(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'poi-chinjufu-mcp-test-'))
+    directory = await mkdtemp(join(tmpdir(), 'poi-nanodesu-mcp-test-'))
   })
 
   after(async () => {
@@ -135,7 +135,7 @@ describe('port file', () => {
   })
 
   test('defaults to a path that does not collide with poi-plugin-mcp', () => {
-    assert.match(defaultPortFile(), /\.poi-chinjufu-mcp[/\\]port$/)
+    assert.match(defaultPortFile(), /\.poi-nanodesu-mcp[/\\]port$/)
     assert.doesNotMatch(defaultPortFile(), /\.poi-mcp[/\\]port$/)
   })
 })

@@ -13,7 +13,7 @@ export const PORT_CONFIG_KEY = 'plugin.mcp.port'
  */
 export const START_TIMEOUT_MS = 15_000
 
-const LOG_PREFIX = '[poi-plugin-chinjufu-mcp]'
+const LOG_PREFIX = '[poi-plugin-nanodesu-mcp]'
 
 let handle: ServerHandle | undefined
 

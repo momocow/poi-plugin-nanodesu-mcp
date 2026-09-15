@@ -11,7 +11,7 @@
  * `poiPlugin.id` in package.json.
  */
 
-export const NAMESPACE = 'poi_chinjufu_mcp'
+export const NAMESPACE = 'poi_nanodesu_mcp'
 
 type PoiWindow = {
   i18n?: Record<string, { __?: unknown }>

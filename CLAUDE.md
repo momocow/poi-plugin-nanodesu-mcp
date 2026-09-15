@@ -18,7 +18,7 @@ To exercise the server against a real, running poi instance (not just the unit
 tests, which use `test/fixtures/store.json`):
 
 ```sh
-ln -s "$(pwd)" "$HOME/Library/Application Support/poi/plugins/node_modules/poi-plugin-chinjufu-mcp"
+ln -s "$(pwd)" "$HOME/Library/Application Support/poi/plugins/node_modules/poi-plugin-nanodesu-mcp"
 # reload the plugin in poi, then:
 node --import tsx scripts/live-check.ts
 ```
@@ -39,7 +39,7 @@ for the full design rationale; the essentials:
   (`SERVER_NAME`, `DEFAULT_PORT` 12450, `/mcp` and `/health`). Stateless by
   design: a fresh `McpServer`/transport per request, since every tool call reads
   `getStore()` live and there's no session state worth keeping. It publishes its
-  bound port to `~/.poi-chinjufu-mcp/port` for clients that need to discover it
+  bound port to `~/.poi-nanodesu-mcp/port` for clients that need to discover it
   (deliberately not `~/.poi-mcp/port`, which belongs to the unrelated
   `poi-plugin-mcp` package — both can run side by side).
 - **`src/tools.ts`** defines the three tools: `poi_get` (query a store path),
