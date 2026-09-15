@@ -12,11 +12,13 @@ redux store。
 
 所以可讀的東西分成三類，界線值得先弄清楚：
 
-| 類別 | 例子 | 來源 |
-| --- | --- | --- |
-| poi 自己的 state | `info.ships`、`info.quests`、`fcd.map` | redux store |
-| 其他插件的 state | `ext.poi-plugin-quest-line._.questList`、`ext.poi-plugin-battle-detail._.indexes` | redux store（允許清單控管） |
-| 非 state 的實用資料 | `questline.quests`（任務線圖）、`poi_battle`（單場戰鬥記錄） | 插件隨附的靜態資產、或寫在磁碟上的記錄 |
+
+| 類別            | 例子                                                                               | 來源                  |
+| ------------- | -------------------------------------------------------------------------------- | ------------------- |
+| poi 自己的 state | `info.ships`、`info.quests`、`fcd.map`                                             | redux store         |
+| 其他插件的 state   | `ext.poi-plugin-quest-line._.questList`、`ext.poi-plugin-battle-detail._.indexes` | redux store（允許清單控管） |
+| 非 state 的實用資料 | `questline.quests`（任務線圖）、`poi_battle`（單場戰鬥記錄）                                    | 插件隨附的靜態資產、或寫在磁碟上的記錄 |
+
 
 第三類是刻意納入的：有些資料對 agent 極有價值，卻從來不進 redux——任務線圖
 是插件 `require()` 進模組區域變數的靜態資產，戰鬥記錄則是一場一個 gz 檔寫在
@@ -32,14 +34,16 @@ redux store。
 沒安裝不會出錯，只是該分支不會出現在 `poi_describe` 的根列表，而直接去讀會
 得到一則指名該套件的「未安裝」訊息。
 
-| poi 套件 | 提供的資料 | 取得機制 | 對外路徑 |
-| --- | --- | --- | --- |
-| poi-plugin-quest-line | 累積的任務清單（含 `api_state`）與跨會話的 seen／cleared id | redux ext state（整包） | `ext.poi-plugin-quest-line._` |
-| poi-plugin-quest-line | 靜態任務線圖（任務目錄與前置關係） | **磁碟**上的隨附資產 | `questline.quests` |
-| poi-plugin-battle-detail | 戰鬥索引（`id`／`map`／`route`／`rank`） | redux ext state（**僅 `_.indexes`**） | `ext.poi-plugin-battle-detail._.indexes` |
-| poi-plugin-battle-detail | 單場戰鬥完整記錄（編成、裝備、封包） | **磁碟**上的 gz 檔，依 id 讀 | `poi_battle` 工具 |
-| poi-plugin-akashic-records | 出擊／遠征／建造／解體日誌 | redux ext state（整包） | `ext.poi-plugin-akashic-records._` |
-| poi-plugin-akashic-records-ex | 同上，另加 quest 日誌 | redux ext state（整包） | `ext.poi-plugin-akashic-records-ex._` |
+
+| poi 套件                                                                                    | 提供的資料                                       | 取得機制                               | 對外路徑                                     |
+| ----------------------------------------------------------------------------------------- | ------------------------------------------- | ---------------------------------- | ---------------------------------------- |
+| [poi-plugin-quest-line](https://github.com/cnxin/poi-plugin-quest-line)                   | 累積的任務清單（含 `api_state`）與跨會話的 seen／cleared id | redux ext state（整包）                | `ext.poi-plugin-quest-line._`            |
+| [poi-plugin-quest-line](https://github.com/cnxin/poi-plugin-quest-line)                   | 靜態任務線圖（任務目錄與前置關係）                           | **磁碟**上的隨附資產                       | `questline.quests`                       |
+| [poi-plugin-battle-detail](https://github.com/poooi/plugin-battle-detail)                 | 戰鬥索引（`id`／`map`／`route`／`rank`）             | redux ext state（**僅 `_.indexes`**） | `ext.poi-plugin-battle-detail._.indexes` |
+| [poi-plugin-battle-detail](https://github.com/poooi/plugin-battle-detail)                 | 單場戰鬥完整記錄（編成、裝備、封包）                          | **磁碟**上的 gz 檔，依 id 讀               | `poi_battle` 工具                          |
+| [poi-plugin-akashic-records](https://github.com/poooi/plugin-akashic-records)             | 出擊／遠征／建造／解體日誌                               | redux ext state（整包）                | `ext.poi-plugin-akashic-records._`       |
+| [poi-plugin-akashic-records-ex](https://github.com/momocow/poi-plugin-akashic-records-ex) | 同上，另加 quest 日誌                              | redux ext state（整包）                | `ext.poi-plugin-akashic-records-ex._`    |
+
 
 有兩個套件各出現兩次，因為它們是**用兩種不同機制**被依賴的。原因就是上面
 核心概念講的那件事：這兩個插件最有價值的資料根本不進 redux，所以 state 讀一半、
@@ -59,12 +63,14 @@ redux store。
 
 ### 非 poi 的依賴
 
-| 類型 | 內容 |
-| --- | --- |
-| runtime | `@modelcontextprotocol/sdk`、`zod` |
-| dev | `@types/node`、`tsx`、`typescript` |
-| 由 poi 在執行期提供 | `react` —— 刻意**不**安裝，見 `src/poi-modules.d.ts` |
+
+| 類型              | 內容                                                 |
+| --------------- | -------------------------------------------------- |
+| runtime         | `@modelcontextprotocol/sdk`、`zod`                  |
+| dev             | `@types/node`、`tsx`、`typescript`                   |
+| 由 poi 在執行期提供    | `react` —— 刻意**不**安裝，見 `src/poi-modules.d.ts`      |
 | poi 的 window 全域 | `getStore`、`isMain`、`config`、`APPDATA_PATH`、`i18n` |
+
 
 ## 為什麼
 
@@ -115,20 +121,18 @@ claude mcp add poi --transport http http://127.0.0.1:12450/mcp
 
 集合（陣列，或以 id 為鍵的物件）支援：
 
-- **`where`** — 篩選運算式：`<欄位> <運算子> <值|欄位>`，可用 `and`／`or`／`not`
-  與括號組合。運算子：`= == != < <= > >= in contains exists`。`contains` 是陣列
-  成員判斷，若兩邊都是字串則為子字串比對。欄位可為巢狀或帶索引（`api_exp[0]`）；
-  若某一列本身是陣列，則以位置定址（`[0]`、`[1]`）。
+- `**where**` — 篩選運算式：`<欄位> <運算子> <值|欄位>`，可用 `and`／`or`／`not`
+與括號組合。運算子：`= == != < <= > >= in contains exists`。`contains` 是陣列
+成員判斷，若兩邊都是字串則為子字串比對。欄位可為巢狀或帶索引（`api_exp[0]`）；
+若某一列本身是陣列，則以位置定址（`[0]`、`[1]`）。
 
   範例：`"api_nowhp < api_maxhp"`、`"api_lv >= 99 and api_locked = 1"`、
   `"api_ship_id in [487, 213]"`、`"api_sally_area exists"`、
   `"[2] contains \"Boss\""`。
-
-- **`select`** — 要投影的欄位路徑，例如 `["api_ship_id", "api_nowhp"]`。
-  `[]` 會**映射整個陣列**而不是索引它，所以 `"api_ship[].api_lv"` 會每艘艦各給
-  一個等級。它是投影而非路徑，因此在 `path` 裡會被拒絕。
-
-- **`limit`** — 最多回傳幾筆（預設 200）。
+- `**select**` — 要投影的欄位路徑，例如 `["api_ship_id", "api_nowhp"]`。
+`[]` 會**映射整個陣列**而不是索引它，所以 `"api_ship[].api_lv"` 會每艘艦各給
+一個等級。它是投影而非路徑，因此在 `path` 裡會被拒絕。
+- `**limit**` — 最多回傳幾筆（預設 200）。
 
 單一記錄只支援 `select`。`maxBytes` 限制序列化後的回應大小（預設 65536，
 硬上限 262144）；集合會被截斷到塞得下，單一過大的記錄則直接回報錯誤。
@@ -158,11 +162,13 @@ claude mcp add poi --transport http http://127.0.0.1:12450/mcp
 > **字形陷阱：同一個字有三種寫法。** 這份目錄的文字欄位是**簡體中文**，
 > 而同一個概念在這個專案裡三種字形都會出現，很容易寫錯：
 >
-> | 字形 | 寫法 | 碼位 | 出現在 |
-> | --- | --- | --- | --- |
-> | 簡體 | `出击` | U+51FB | `questline.quests` 的 `category`／`name`／`desc` |
-> | 繁體 | `出擊` | U+64CA | `ext.poi-plugin-battle-detail._.indexes` 的 `desc` |
-> | 日文 | `出撃` | U+6483 | 遊戲原文；`questline.quests` 的 `nameJa` 欄位 |
+>
+> | 字形  | 寫法   | 碼位     | 出現在                                               |
+> | --- | ---- | ------ | ------------------------------------------------- |
+> | 簡體  | `出击` | U+51FB | `questline.quests` 的 `category`／`name`／`desc`     |
+> | 繁體  | `出擊` | U+64CA | `ext.poi-plugin-battle-detail._.indexes` 的 `desc` |
+> | 日文  | `出撃` | U+6483 | 遊戲原文；`questline.quests` 的 `nameJa` 欄位             |
+>
 >
 > 最清楚的例證是任務 201 —— **同一筆記錄的兩個欄位**寫著同一個字：
 > `name` 是「击破敌舰队」，`nameJa` 是「敵艦隊を撃破せよ！」。
