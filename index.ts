@@ -1,3 +1,4 @@
+import { makeBattleReader } from './src/battles.ts'
 import { isMainWindow, readAppDataPath, readPortConfig, resolveGetStore } from './src/poi.ts'
 import { loadQuestLineDb, withQuestLine } from './src/questline.ts'
 import { DEFAULT_PORT, startMcpServer, type ServerHandle } from './src/server.ts'
@@ -46,17 +47,27 @@ export const pluginDidLoad = (): void => {
   const port = readPortConfig(poiWindow, PORT_CONFIG_KEY, DEFAULT_PORT)
   console.log(`${LOG_PREFIX} starting on port ${port}…`)
 
+  const appDataPath = readAppDataPath(poiWindow)
+
   // Read once at load: the asset is frozen, and a plugin reload re-reads it.
   // Its absence is normal — quest-line simply is not installed — so it is
   // logged and otherwise ignored.
-  const questLine = loadQuestLineDb(readAppDataPath(poiWindow))
+  const questLine = loadQuestLineDb(appDataPath)
   if (questLine === undefined) {
     console.log(`${LOG_PREFIX} quest graph unavailable; the 'questline' root is not exposed`)
+  }
+
+  // Battle records are read per id at request time, not loaded here: there are
+  // thousands of them, and only the ones asked for are worth the disk.
+  const readBattle = makeBattleReader(appDataPath)
+  if (readBattle === undefined) {
+    console.log(`${LOG_PREFIX} no poi data directory; poi_battle will report itself unavailable`)
   }
 
   withTimeout(
     startMcpServer({
       getStore: () => withQuestLine(getStore(), questLine),
+      readBattle,
       port,
       onStatus: setStatus,
     }),

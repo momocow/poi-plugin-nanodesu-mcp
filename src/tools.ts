@@ -1,3 +1,4 @@
+import { BATTLE_DETAIL_PACKAGE, type ReadBattle } from './battles.ts'
 import { readableRoots, resolveStorePath } from './paths.ts'
 import { applyQuery, applySelect, isCollection, type QueryResult } from './query.ts'
 import { fitToBytes, toJsonSafe } from './serialize.ts'
@@ -12,6 +13,8 @@ export type GetArgs = {
 }
 
 export type LookupArgs = { kind: string; ids: number[]; select?: string[] }
+
+export type BattleArgs = { ids: number[]; select?: string[]; maxBytes?: number }
 
 export type DescribeArgs = { path?: string }
 
@@ -34,6 +37,12 @@ export const DEFAULT_MAX_BYTES = 65536
 export const MAX_MAX_BYTES = 262144
 export const MAX_LOOKUP_IDS = 200
 export const MAX_DESCRIBE_KEYS = 50
+
+/**
+ * Far below `MAX_LOOKUP_IDS`, because these records are not small: a battle is
+ * ~22 KB whole, against a few hundred bytes for a master-data row.
+ */
+export const MAX_BATTLE_IDS = 50
 
 /**
  * Master-data tables, by the short name callers use.
@@ -75,13 +84,21 @@ const EMPTY_HINTS: Record<string, string> = {
 
 const emptyHintFor = (path: string): string => EMPTY_HINTS[path] ?? EMPTY_HINT
 
-export function poiGet(store: unknown, args: GetArgs): ToolResult<GetData> {
-  const maxBytes = args.maxBytes ?? DEFAULT_MAX_BYTES
+const badMaxBytes = (maxBytes: number): string | undefined => {
   if (!Number.isFinite(maxBytes) || maxBytes <= 0) {
-    return { ok: false, error: 'maxBytes must be a positive number' }
+    return 'maxBytes must be a positive number'
   }
   if (maxBytes > MAX_MAX_BYTES) {
-    return { ok: false, error: `maxBytes ${maxBytes} exceeds the hard maximum of ${MAX_MAX_BYTES}` }
+    return `maxBytes ${maxBytes} exceeds the hard maximum of ${MAX_MAX_BYTES}`
+  }
+  return undefined
+}
+
+export function poiGet(store: unknown, args: GetArgs): ToolResult<GetData> {
+  const maxBytes = args.maxBytes ?? DEFAULT_MAX_BYTES
+  const rejected = badMaxBytes(maxBytes)
+  if (rejected !== undefined) {
+    return { ok: false, error: rejected }
   }
 
   const resolved = resolveStorePath(store, args.path)
@@ -160,6 +177,94 @@ export function poiLookup(store: unknown, args: LookupArgs): ToolResult<unknown>
   }
 
   return { ok: true, data: out }
+}
+
+/**
+ * Read whole battle records by id, as saved by poi-plugin-battle-detail.
+ *
+ * Ids come from that plugin's index (`ext.poi-plugin-battle-detail._.indexes`),
+ * which is what says a battle happened and when. This returns what the index
+ * cannot: the fleet that sortied, with each ship's level and equipment.
+ *
+ * An id with no readable file is omitted rather than failing the call — one
+ * deleted or half-written record should not lose the rest of a batch — and the
+ * hint names what went missing.
+ */
+export function poiBattle(read: ReadBattle | undefined, args: BattleArgs): ToolResult<GetData> {
+  const maxBytes = args.maxBytes ?? DEFAULT_MAX_BYTES
+  const rejected = badMaxBytes(maxBytes)
+  if (rejected !== undefined) {
+    return { ok: false, error: rejected }
+  }
+
+  if (read === undefined) {
+    return {
+      ok: false,
+      error:
+        'battle records are not available: poi did not provide a data directory, so there is ' +
+        `nowhere to read ${BATTLE_DETAIL_PACKAGE}'s records from`,
+    }
+  }
+
+  if (!Array.isArray(args.ids) || args.ids.length === 0) {
+    return {
+      ok: false,
+      error:
+        'ids must be a non-empty array of battle ids, as found in ' +
+        `ext.${BATTLE_DETAIL_PACKAGE}._.indexes`,
+    }
+  }
+  if (args.ids.length > MAX_BATTLE_IDS) {
+    return {
+      ok: false,
+      error:
+        `too many ids (${args.ids.length}); the maximum is ${MAX_BATTLE_IDS} per call. ` +
+        'A whole battle is ~22 KB, so narrow with select before widening the batch.',
+    }
+  }
+
+  const items: Record<string, unknown> = {}
+  const missing: number[] = []
+  for (const id of args.ids) {
+    let record: unknown
+    try {
+      record = read(id)
+    } catch {
+      missing.push(id)
+      continue
+    }
+    items[String(id)] = args.select ? applySelect(record, args.select) : toJsonSafe(record)
+  }
+
+  const fitted = fitToBytes(
+    {
+      kind: 'object-map',
+      total: args.ids.length,
+      returned: Object.keys(items).length,
+      truncated: false,
+      items,
+    },
+    maxBytes,
+  )
+  if (!fitted.ok) {
+    return { ok: false, error: fitted.error }
+  }
+
+  const payload = fitted.payload
+  const hints: string[] = []
+  if (payload.kind === 'object-map' && payload.truncated) {
+    hints.push(
+      `showing ${payload.returned} of ${payload.total} — narrow with select, or raise maxBytes`,
+    )
+  }
+  if (missing.length > 0) {
+    hints.push(`no readable record for ${missing.join(', ')}`)
+  }
+
+  return {
+    ok: true,
+    data: hints.length > 0 ? { ...payload, hint: hints.join('; ') } : payload,
+  }
 }
 
 export function poiDescribe(store: unknown, args: DescribeArgs): ToolResult<DescribeData> {

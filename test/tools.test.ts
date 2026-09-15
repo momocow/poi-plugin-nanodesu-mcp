@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test, describe } from 'node:test'
 
-import { poiGet, poiLookup, poiDescribe, LOOKUP_KINDS } from '../src/tools.ts'
+import { poiGet, poiLookup, poiDescribe, poiBattle, LOOKUP_KINDS, MAX_BATTLE_IDS } from '../src/tools.ts'
 import store from './fixtures/store.json' with { type: 'json' }
 
 const ok = <T extends { ok: boolean }>(result: T): T => {
@@ -200,6 +200,70 @@ describe('poiLookup', () => {
   test('reports a missing master table without throwing', () => {
     const error = errorOf(poiLookup(store, { kind: 'missions', ids: [1] }))
     assert.match(error, /missions|\$missions/)
+  })
+})
+
+describe('poiBattle', () => {
+  const battle = (shipIds: number[]) => ({
+    type: 'Boss',
+    fleet: {
+      main: shipIds.map((id, i) => ({
+        api_ship_id: id,
+        api_lv: 90 + i,
+        poi_slot: [{ api_name: '20.3cm' }],
+      })),
+    },
+  })
+  const records: Record<number, unknown> = { 1: battle([507, 560]), 2: battle([283]) }
+  const read = (id: number) => {
+    const found = records[id]
+    if (found === undefined) throw new Error('ENOENT')
+    return found
+  }
+
+  test('reads records by id', () => {
+    const result = ok(poiBattle(read, { ids: [1, 2] }))
+    if (result.ok && result.data.kind === 'object-map') {
+      assert.deepEqual(Object.keys(result.data.items), ['1', '2'])
+      assert.equal(result.data.total, 2)
+    }
+  })
+
+  test('projects the fleet across ships with a wildcard select', () => {
+    // The point of the tool: a whole record is ~22 KB, this is a few hundred bytes.
+    const result = ok(poiBattle(read, { ids: [1], select: ['fleet.main[].api_ship_id'] }))
+    if (result.ok && result.data.kind === 'object-map') {
+      assert.deepEqual(result.data.items['1'], { 'fleet.main[].api_ship_id': [507, 560] })
+    }
+  })
+
+  test('omits an unreadable id and says which', () => {
+    const result = ok(poiBattle(read, { ids: [1, 999] }))
+    if (result.ok && result.data.kind === 'object-map') {
+      assert.deepEqual(Object.keys(result.data.items), ['1'])
+      assert.match(result.data.hint ?? '', /999/)
+    }
+  })
+
+  test('truncates rather than overflowing the byte cap', () => {
+    const result = ok(poiBattle(read, { ids: [1, 2], maxBytes: 200 }))
+    if (result.ok && result.data.kind === 'object-map') {
+      assert.equal(result.data.truncated, true)
+      assert.match(result.data.hint ?? '', /select|maxBytes/)
+    }
+  })
+
+  test('refuses a batch too large to be worth reading', () => {
+    const ids = Array.from({ length: MAX_BATTLE_IDS + 1 }, (_, i) => i + 1)
+    assert.match(errorOf(poiBattle(read, { ids })), new RegExp(String(MAX_BATTLE_IDS)))
+  })
+
+  test('rejects an empty id list and points at the index', () => {
+    assert.match(errorOf(poiBattle(read, { ids: [] })), /indexes/)
+  })
+
+  test('reports itself unavailable when there is nowhere to read from', () => {
+    assert.match(errorOf(poiBattle(undefined, { ids: [1] })), /not available/i)
   })
 })
 

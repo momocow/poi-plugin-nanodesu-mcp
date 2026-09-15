@@ -79,6 +79,34 @@ the game returned it, with `api_state` 1 = offered, 2 = accepted, 3 = awaiting
 reward. It is built from the quest pages you have actually opened in game, so it
 is as complete as your browsing has been — not an authoritative list.
 
+Battle history comes in two halves. `ext.poi-plugin-battle-detail._.indexes` is
+one row per battle — `id`, `time_`, `map`, `route`, `rank` — which is what says a
+battle happened and when. Only that sub-path is readable: its sibling
+`sortieIndexes` is an Immutable.js List whose own properties are internals
+rather than data, and it is derived anyway — the same battles grouped into
+sorties, recomputable from `indexes` plus the route graph at `fcd.map`. The
+other half is the record itself, read by id with `poi_battle`.
+
+### `poi_battle`
+
+Read whole battle records saved by **poi-plugin-battle-detail**, by the `id`
+found in the index above. A record holds what the index cannot: `fleet.main` and
+`fleet.escort`, each ship with `api_ship_id`, `api_lv`, `api_kyouka` and its
+`poi_slot` equipment, plus the raw battle packet and result. Ship and equipment
+ids resolve through `poi_lookup`.
+
+A whole record is ~22 KB, nearly all of it equipment, so `select` is the
+difference between three battles per response and thirty. `[]` in a fieldpath
+maps over an array rather than indexing it — that is what makes a projection
+across a fleet expressible at all:
+
+```
+select: ["fleet.main[].api_ship_id", "fleet.main[].poi_slot[].api_name"]
+```
+
+`[]` works in `poi_get`'s `select` too. It is a projection, not a path, so it is
+refused in `path`.
+
 Collections (arrays, or objects keyed by id) support:
 
 - **`where`** — a filter expression: `<field> <op> <value|field>`, combined

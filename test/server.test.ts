@@ -40,11 +40,11 @@ describe('mcp server over http', () => {
     assert.ok(handle.port > 0)
   })
 
-  test('advertises exactly the three documented tools', async () => {
+  test('advertises exactly the four documented tools', async () => {
     const { tools } = await client.listTools()
     assert.deepEqual(
       tools.map((t) => t.name).sort(),
-      ['poi_describe', 'poi_get', 'poi_lookup'],
+      ['poi_battle', 'poi_describe', 'poi_get', 'poi_lookup'],
     )
   })
 
@@ -151,10 +151,44 @@ describe('mcp server over http', () => {
 
     // Still responsive after the throw.
     const tools = await throwClient.listTools()
-    assert.equal(tools.tools.length, 3)
+    assert.equal(tools.tools.length, 4)
 
     await throwClient.close()
     await thrower.close()
+  })
+
+  test('poi_battle reads a record through the injected reader', async () => {
+    const record = { fleet: { main: [{ api_ship_id: 507 }, { api_ship_id: 560 }] } }
+    const withBattles = await startMcpServer({
+      getStore: () => store,
+      readBattle: () => record,
+      port: 0,
+      portFile: null,
+    })
+    const battleClient = new Client({ name: 'test-client', version: '1.0.0' })
+    try {
+      await battleClient.connect(
+        new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${withBattles.port}/mcp`)),
+      )
+      const result = await battleClient.callTool({
+        name: 'poi_battle',
+        arguments: { ids: [1789232781382], select: ['fleet.main[].api_ship_id'] },
+      })
+      const data = JSON.parse(textOf(result))
+      assert.deepEqual(data.items['1789232781382'], {
+        'fleet.main[].api_ship_id': [507, 560],
+      })
+    } finally {
+      // Always, so a failed assertion cannot leave the loop holding a socket.
+      await battleClient.close()
+      await withBattles.close()
+    }
+  })
+
+  test('poi_battle says so when there is no reader rather than failing the call', async () => {
+    const result = await client.callTool({ name: 'poi_battle', arguments: { ids: [1] } })
+    assert.equal(isError(result), true)
+    assert.match(textOf(result), /not available/i)
   })
 
   test('rejects a request whose Host header is not localhost', async () => {

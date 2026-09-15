@@ -6,14 +6,17 @@ import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
 
+import { type ReadBattle } from './battles.ts'
 import {
   LOOKUP_KINDS,
+  poiBattle,
   poiDescribe,
   poiGet,
   poiLookup,
   type ToolResult,
   DEFAULT_LIMIT,
   DEFAULT_MAX_BYTES,
+  MAX_BATTLE_IDS,
   MAX_LOOKUP_IDS,
   MAX_MAX_BYTES,
 } from './tools.ts'
@@ -44,6 +47,8 @@ export type ServerStatus = {
 
 export type ServerOptions = {
   getStore: () => unknown
+  /** Reads one saved battle record by id. Omitted when there is none to read. */
+  readBattle?: ReadBattle
   port: number
   host?: string
   onStatus?: (status: ServerStatus) => void
@@ -122,18 +127,26 @@ const textResult = (text: string, isError = false) => ({
  * throwing store, a bug in a handler — becomes an error *result* rather than a
  * rejected promise, so a bad call can never take the renderer down with it.
  */
-const adapt =
-  <A>(getStore: () => unknown, handler: (store: unknown, args: A) => ToolResult<unknown>) =>
+const adaptPure =
+  <A>(handler: (args: A) => ToolResult<unknown>) =>
   async (args: A) => {
     try {
-      const result = handler(getStore(), args)
+      const result = handler(args)
       return result.ok ? textResult(JSON.stringify(result.data)) : textResult(result.error, true)
     } catch (e) {
       return textResult(e instanceof Error ? e.message : String(e), true)
     }
   }
 
-async function buildMcpServer(getStore: () => unknown): Promise<McpServer> {
+const adapt = <A>(
+  getStore: () => unknown,
+  handler: (store: unknown, args: A) => ToolResult<unknown>,
+) => adaptPure<A>((args) => handler(getStore(), args))
+
+async function buildMcpServer(
+  getStore: () => unknown,
+  readBattle?: ReadBattle,
+): Promise<McpServer> {
   const { McpServer: Server } = await loadSdk()
   const server = new Server(
     { name: SERVER_NAME, version: SERVER_VERSION },
@@ -219,6 +232,44 @@ async function buildMcpServer(getStore: () => unknown): Promise<McpServer> {
       },
     },
     adapt(getStore, poiLookup),
+  )
+
+  server.registerTool(
+    'poi_battle',
+    {
+      title: 'Read saved battle records',
+      description:
+        'Read whole battle records saved by poi-plugin-battle-detail, by id. Ids come from ' +
+        'that plugin\'s index at "ext.poi-plugin-battle-detail._.indexes", which holds one row ' +
+        'per battle (id, time_, map, route, rank) — filter that for the battles you want, then ' +
+        'pass their ids here. A record holds what the index cannot: fleet.main / fleet.escort ' +
+        'with each ship\'s api_ship_id, api_lv, api_kyouka and poi_slot equipment, plus the ' +
+        'raw battle packet and its result. Resolve ship and equipment ids with poi_lookup. ' +
+        `A whole record is ~22 KB, so use select: "fleet.main[].api_ship_id" costs a few ` +
+        `hundred bytes where the whole fleet costs 18 KB. At most ${MAX_BATTLE_IDS} ids per call.`,
+      inputSchema: {
+        ids: z
+          .array(z.number())
+          .describe('Battle ids, as found in ext.poi-plugin-battle-detail._.indexes.'),
+        select: z
+          .array(z.string())
+          .optional()
+          .describe(
+            'Fieldpaths to keep, e.g. "fleet.main[].api_ship_id", "fleet.main[].poi_slot[].api_name". ' +
+              'The path string is used as the output key.',
+          ),
+        maxBytes: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe(
+            `Serialized size cap (default ${DEFAULT_MAX_BYTES}, maximum ${MAX_MAX_BYTES}). ` +
+              'Records are dropped from the end until the response fits.',
+          ),
+      },
+    },
+    adaptPure((args: Parameters<typeof poiBattle>[1]) => poiBattle(readBattle, args)),
   )
 
   server.registerTool(
@@ -329,7 +380,7 @@ export async function startMcpServer(options: ServerOptions): Promise<ServerHand
       enableDnsRebindingProtection: true,
       allowedHosts: [`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`],
     })
-    const mcp = await buildMcpServer(options.getStore)
+    const mcp = await buildMcpServer(options.getStore, options.readBattle)
 
     res.on('close', () => {
       void transport.close()
