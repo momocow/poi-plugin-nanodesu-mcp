@@ -1,174 +1,202 @@
 # poi-plugin-chinjufu-mcp
 
-A [poi](https://github.com/poooi/poi) plugin that exposes poi's live KanColle
-game state to MCP clients — Claude Code, or any other MCP-speaking agent — as
-read-only tools. No polling poi's cache files, no staleness: every call reads
-the redux store the game is actually running.
+一個 [poi](https://github.com/poooi/poi) 外掛，把 poi 當下的艦隊收藏品遊戲狀態
+以唯讀工具的形式開放給 MCP 客戶端（Claude Code，或任何說 MCP 的 agent）。
+不必去撈 poi 的快取檔，也沒有過期問題：每一次呼叫讀的都是遊戲正在跑的那個
+redux store。
 
-## Why
+## 為什麼
 
-poi already holds the complete game state (ships, fleets, resources, master
-data...) in memory, live, the moment it's fetched from the game API. This
-plugin puts an MCP server in front of that store so an agent can query it
-directly, instead of scraping poi's on-disk cache or re-deriving state from
-raw `kcsapi` traffic. It is read-only by design: no dispatching actions, no
-driving the game webview, no writing anything back.
+poi 本來就把完整的遊戲狀態（艦娘、艦隊、資源、主資料……）放在記憶體裡，
+而且是從遊戲 API 收到的當下就更新。這個外掛在那個 store 前面架了一台 MCP
+伺服器，讓 agent 直接查詢，不用去刮 poi 的磁碟快取，也不用從原始 `kcsapi`
+封包重新推導狀態。
 
-## Install
+設計上是唯讀的：不 dispatch 任何 action、不操作遊戲 webview、不寫回任何東西。
 
-Symlink this repo into poi's plugin directory (there is no published npm
-package):
+## 安裝
+
+把這個 repo 用 symlink 掛進 poi 的外掛目錄（沒有發佈到 npm）：
 
 ```sh
 ln -s /path/to/poi-plugin-chinjufu-mcp \
   "$HOME/Library/Application Support/poi/plugins/node_modules/poi-plugin-chinjufu-mcp"
 ```
 
-Then reload plugins in poi (or restart it). Ships as raw TypeScript with no
-build step — poi transpiles `.ts` on `require()`, so edits take effect on the
-next plugin reload.
+然後在 poi 裡重載外掛（或重啟 poi）。本專案以原始 TypeScript 發佈、沒有建置
+步驟——poi 會在 `require()` 時即時轉譯 `.ts`，所以改完程式碼，下次重載外掛就
+生效。
 
-The plugin only starts its server in poi's main window, and only once poi has
-given it a working `getStore()`. Its status — listening/stopped/error, the
-endpoint URL, and a request counter — is shown in poi's plugin panel.
+伺服器只在 poi 的**主視窗**啟動，而且要等 poi 給出可用的 `getStore()` 之後。
+狀態（listening／stopped／error、端點網址、請求計數）會顯示在 poi 的外掛面板。
 
-## Connect an agent
+## 連接 agent
 
-Once the plugin is listening (default `http://127.0.0.1:12450/mcp`):
+外掛開始監聽後（預設 `http://127.0.0.1:12450/mcp`）：
 
 ```sh
 claude mcp add poi --transport http http://127.0.0.1:12450/mcp
 ```
 
-The bound port is also published to `~/.poi-chinjufu-mcp/port` for anything
-that needs to discover it programmatically.
+實際綁定的連接埠也會寫到 `~/.poi-chinjufu-mcp/port`，方便需要以程式探索的情境。
 
-## Tools
+## 工具
 
 ### `poi_get`
 
-Read a dot path into the redux store, e.g. `info.ships`, `info.fleets`,
-`info.basic`, `info.resources`. Readable roots: `info`, `const`, `fcd`, `wctf`,
-`battle`, `sortie`, `timers`, `misc`. Allowlisted plugin state is readable one
-plugin at a time under `ext`, e.g. the Logbook sortie log at
-`ext.poi-plugin-akashic-records._.attack.data` (the `_` is poi's own wrapper
-around every plugin reducer); `ext` as a whole is not readable. Plugins are
-matched by their exact poi package name, so a fork is a separate entry — the
-Logbook EX fork is `ext.poi-plugin-akashic-records-ex`.
+以點分路徑讀取 redux store，例如 `info.ships`、`info.fleets`、`info.basic`、
+`info.resources`。
 
-`questline` is not a poi branch at all but a read-only overlay of the static
-quest graph that **poi-plugin-quest-line** ships as an asset: `questline.quests`
-maps every quest id to its catalogue entry, including `prereqIds` and `unlocks`
-(the edges), plus `wikiId`, `name`, `category`, `period` and reward fields. It is
-mounted as a root so the same `where`/`select` machinery reads it, and it is
-absent when that plugin is not installed. It is a frozen catalogue of what
-exists in the game, and says nothing about your progress — joining it to live
-state is the agent's job, not this plugin's.
+**可讀的根**：`info`、`const`、`fcd`、`wctf`、`battle`、`sortie`、`timers`、
+`misc`。
 
-Its text fields are Chinese, so they must be quoted in a `where` — a bare word
-is a fieldpath, and `category = 出击` is a syntax error rather than a match.
-Walk the graph with `prereqIds contains <id>` and `unlocks contains <id>`; the
-49 quests that have no prerequisite are `depth = 0`. Note that `prereqIds = []`
-matches nothing instead of failing: `=` compares scalars, so an array literal on
-the right silently matches no row.
+#### 集合查詢
 
-The quest list the game offers is one such branch, and the only place it exists:
-`info.quests` holds the quests you have *accepted*, never the ones merely
-offered. `ext.poi-plugin-quest-line._.questList` maps `api_no` to the quest as
-the game returned it, with `api_state` 1 = offered, 2 = accepted, 3 = awaiting
-reward. It is built from the quest pages you have actually opened in game, so it
-is as complete as your browsing has been — not an authoritative list.
+集合（陣列，或以 id 為鍵的物件）支援：
 
-Battle history comes in two halves. `ext.poi-plugin-battle-detail._.indexes` is
-one row per battle — `id`, `time_`, `map`, `route`, `rank` — which is what says a
-battle happened and when. Only that sub-path is readable: its sibling
-`sortieIndexes` is an Immutable.js List whose own properties are internals
-rather than data, and it is derived anyway — the same battles grouped into
-sorties, recomputable from `indexes` plus the route graph at `fcd.map`. The
-other half is the record itself, read by id with `poi_battle`.
+- **`where`** — 篩選運算式：`<欄位> <運算子> <值|欄位>`，可用 `and`／`or`／`not`
+  與括號組合。運算子：`= == != < <= > >= in contains exists`。`contains` 是陣列
+  成員判斷，若兩邊都是字串則為子字串比對。欄位可為巢狀或帶索引（`api_exp[0]`）；
+  若某一列本身是陣列，則以位置定址（`[0]`、`[1]`）。
+
+  範例：`"api_nowhp < api_maxhp"`、`"api_lv >= 99 and api_locked = 1"`、
+  `"api_ship_id in [487, 213]"`、`"api_sally_area exists"`、
+  `"[2] contains \"Boss\""`。
+
+- **`select`** — 要投影的欄位路徑，例如 `["api_ship_id", "api_nowhp"]`。
+  `[]` 會**映射整個陣列**而不是索引它，所以 `"api_ship[].api_lv"` 會每艘艦各給
+  一個等級。它是投影而非路徑，因此在 `path` 裡會被拒絕。
+
+- **`limit`** — 最多回傳幾筆（預設 200）。
+
+單一記錄只支援 `select`。`maxBytes` 限制序列化後的回應大小（預設 65536，
+硬上限 262144）；集合會被截斷到塞得下，單一過大的記錄則直接回報錯誤。
+
+#### 外掛狀態（`ext`）
+
+允許清單內的外掛狀態可以一次讀一個，例如 Logbook 的出擊紀錄在
+`ext.poi-plugin-akashic-records._.attack.data`（那個 `_` 是 poi 自己包在每個
+外掛 reducer 外面的一層）。`ext` 整包不可讀。
+
+外掛是以**完整的 poi 套件名**比對，所以分支版本算另一筆——Logbook EX 分支是
+`ext.poi-plugin-akashic-records-ex`。
+
+某些外掛只開放**部分**子路徑，詳見下面的戰鬥索引。
+
+#### `questline`：任務線圖
+
+`questline` 並不是 poi 的分支，而是 **poi-plugin-quest-line** 隨套件附帶的
+靜態任務圖的唯讀疊加層。`questline.quests` 把每個任務 id 對應到它的目錄條目，
+包含 `prereqIds` 與 `unlocks`（也就是圖的邊），以及 `wikiId`、`name`、
+`category`、`period` 和獎勵欄位。
+
+它被掛成一個根，好讓同一套 `where`／`select` 機制直接讀；該外掛沒安裝時這個根
+就不存在。它是「遊戲裡存在哪些任務」的凍結目錄，**完全不反映你的進度**——要把
+它和即時狀態接起來是 agent 的工作，不是這個外掛的。
+
+> **注意文字是簡體。** 這份資料的文字欄位是簡體中文，而且在 `where` 裡必須加
+> 引號——裸字會被當成欄位名，`category = 出击` 是語法錯誤而不是比對。
+> 所以要寫 `category = "出击"`（簡體）；寫成 `"出擊"`（繁體）**查不到任何東西**。
+
+走訪這張圖用 `prereqIds contains <id>` 和 `unlocks contains <id>`；沒有前置
+條件的 49 個任務是 `depth = 0`。
+
+要注意 `prereqIds = []` **不會報錯，而是比對不到任何一列**：`=` 比的是純量，
+右邊放陣列字面值只會靜默地沒有結果。
+
+#### 可接取的任務
+
+遊戲提供給你的任務清單，只存在於一個地方：`info.quests` 只有你**已接取**的
+任務，從來不含只是「開放可接」的那些。
+
+`ext.poi-plugin-quest-line._.questList` 把 `api_no` 對應到遊戲回傳的任務本體，
+其中 `api_state` 為 1 = 可接未接、2 = 進行中、3 = 已達成待領獎。
+
+它是由你在遊戲中實際打開過的任務頁面累積而成，所以**有多完整取決於你翻過多少
+頁**，不是一份權威清單。
+
+#### 戰鬥紀錄
+
+戰鬥歷史分成兩半。
+
+`ext.poi-plugin-battle-detail._.indexes` 是每場戰鬥一列——`id`、`time_`、
+`map`、`route`、`rank`——這是「何時打了哪一場」的依據。
+
+只有這個子路徑可讀。它的兄弟 `sortieIndexes` 是 Immutable.js 的 `List`，
+自身的可列舉屬性是內部結構而不是資料；而且它本來就是衍生的——同一批戰鬥依
+出擊分組而已，可以用 `indexes` 加上 `fcd.map` 的航路圖重新算出來。
+
+另一半是戰鬥記錄本身，用 `poi_battle` 依 id 讀取。
 
 ### `poi_battle`
 
-Read whole battle records saved by **poi-plugin-battle-detail**, by the `id`
-found in the index above. A record holds what the index cannot: `fleet.main` and
-`fleet.escort`, each ship with `api_ship_id`, `api_lv`, `api_kyouka` and its
-`poi_slot` equipment, plus the raw battle packet and result. Ship and equipment
-ids resolve through `poi_lookup`.
+讀取 **poi-plugin-battle-detail** 存下來的完整戰鬥記錄，依上面索引裡的 `id`
+指定。
 
-A whole record is ~22 KB, nearly all of it equipment, so `select` is the
-difference between three battles per response and thirty. `[]` in a fieldpath
-maps over an array rather than indexing it — that is what makes a projection
-across a fleet expressible at all:
+一筆記錄包含索引給不了的東西：`fleet.main` 與 `fleet.escort`，每艘艦帶
+`api_ship_id`、`api_lv`、`api_kyouka`（改修值）與 `poi_slot` 裝備，再加上原始
+戰鬥封包與結果。艦種與裝備 id 用 `poi_lookup` 轉成名稱。
+
+一筆完整記錄約 22 KB，其中絕大部分是裝備，所以 `select` 就是「一次回應三場」
+和「一次三十場」的差別。`[]` 會映射陣列而非索引它——正是它讓「跨整支艦隊的
+投影」得以表達：
 
 ```
 select: ["fleet.main[].api_ship_id", "fleet.main[].poi_slot[].api_name"]
 ```
 
-`[]` works in `poi_get`'s `select` too. It is a projection, not a path, so it is
-refused in `path`.
+單次最多 50 個 id。讀不到的 id 會被略過並在 `hint` 裡指名，而不是讓整批失敗。
 
-Collections (arrays, or objects keyed by id) support:
+典型用法是先用索引框出時段，再把 id 丟進來查編成——這樣才能從紀錄回推某個
+出擊任務到底有沒有達成：
 
-- **`where`** — a filter expression: `<field> <op> <value|field>`, combined
-  with `and`/`or`/`not` and parentheses. Ops: `= == != < <= > >= in contains
-  exists`. `contains` is array membership, or a substring test when both sides
-  are strings. Fields may be nested or indexed (`api_exp[0]`), and a row that is
-  itself an array is addressed by position (`[0]`, `[1]`).
-  Examples: `"api_nowhp < api_maxhp"`, `"api_lv >= 99 and api_locked = 1"`,
-  `"api_ship_id in [487, 213]"`, `"api_sally_area exists"`,
-  `"[2] contains \"Boss\""`.
-- **`select`** — fieldpaths to project, e.g. `["api_ship_id", "api_nowhp"]`.
-- **`limit`** — max elements returned (default 200).
-
-Single records support `select` only. `maxBytes` caps the serialized response
-size (default 65536, hard max 262144); collections are truncated to fit, a
-single oversized record is an error instead.
+```
+poi_get   path="ext.poi-plugin-battle-detail._.indexes" where="map = \"2-4\" and time_ >= 1789230000000"
+poi_battle ids=[...] select=["fleet.main[].api_ship_id"]
+```
 
 ### `poi_lookup`
 
-Resolve master-data ids to their records — turn `api_ship_id` into a ship
-name, `api_slotitem_id` into an equipment name, etc. `kind` selects the table
-(`ships`, `equips`, `shipTypes`, `equipTypes`, `maps`, `mapareas`, `missions`,
-`useitems`, `shipUpgrades`, `shipgraph`, `graphs`, `exslotEquips`,
-`exslotEquipShips`); `ids` is required (max 200 per call — these tables are
-large, e.g. `const.$ships` alone is ~1.6 MB, so nothing is ever dumped whole).
+把主資料的 id 解析成記錄——`api_ship_id` 變艦名、`api_slotitem_id` 變裝備名等。
+
+`kind` 指定資料表（`ships`、`equips`、`shipTypes`、`equipTypes`、`maps`、
+`mapareas`、`missions`、`useitems`、`shipUpgrades`、`shipgraph`、`graphs`、
+`exslotEquips`、`exslotEquipShips`）；`ids` 為必填，單次最多 200 個——這些表很大
+（光 `const.$ships` 就約 1.6 MB），所以永遠不會整包倒出來。
 
 ### `poi_describe`
 
-Discover what's at a store path before querying it: kind, element count,
-keys, and the field names of a sample element. Call with no path to list the
-readable store roots.
+在查詢之前先了解某個路徑上有什麼：種類、元素數量、鍵、以及取樣元素的欄位名。
+不帶 path 呼叫則列出所有可讀的根。
 
-The plugin does no name resolution or derived fields itself — everything
-returned is raw `kcsapi` data; joining ids to names is `poi_lookup`'s job, and
-interpreting the result is the agent's.
+---
 
-## Development
+這個外掛本身不做名稱解析，也不產生衍生欄位——回傳的都是原始 `kcsapi` 資料；
+把 id 接成名稱是 `poi_lookup` 的事，而詮釋結果是 agent 的事。
+
+## 開發
 
 ```sh
-npm test           # node:test, via test/*.test.ts
+npm test           # node:test，跑 test/*.test.ts
 npm run typecheck  # tsc --noEmit
 ```
 
-`scripts/live-check.ts` exercises the tools against a real running poi
-instance rather than the test fixtures:
+`scripts/live-check.ts` 會對真正在跑的 poi 實例執行這些工具，而不是測試替身：
 
 ```sh
 node --import tsx scripts/live-check.ts
 ```
 
-See `CLAUDE.md` for the source layout and the non-obvious constraints of
-running inside poi's renderer, and
-`docs/superpowers/specs/2026-08-09-poi-plugin-chinjufu-mcp-design.md` for the
-full design writeup.
+原始碼結構、以及在 poi renderer 裡執行時那些不直觀的限制，見 `CLAUDE.md`；
+完整的設計說明見
+`docs/superpowers/specs/2026-08-09-poi-plugin-chinjufu-mcp-design.md`。
 
-## Translations
+## 翻譯
 
-The plugin's UI strings (title, description, status panel) are translatable
-through poi's own i18n mechanism — see `i18n/*.json`. Traditional Chinese
-(`zh-TW`) is included; other poi locales (`en-US`, `ja-JP`, `zh-CN`, `ko-KR`)
-fall back to the English source text until translated.
+外掛的 UI 字串（標題、描述、狀態面板）透過 poi 自己的 i18n 機制翻譯，
+見 `i18n/*.json`。已包含繁體中文（`zh-TW`）；其他 poi 語系（`en-US`、`ja-JP`、
+`zh-CN`、`ko-KR`）在翻譯補上之前，會回退到英文原文。
 
-## License
+## 授權
 
 MIT
