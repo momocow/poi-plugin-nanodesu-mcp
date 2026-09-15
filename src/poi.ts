@@ -112,7 +112,7 @@ export function readStringConfig(window: unknown, key: string): string | undefin
  * `config.set` (or one that throws) just means the setting won't be
  * remembered, which is never worth failing the caller over.
  */
-export function writeStringConfig(window: unknown, key: string, value: string): void {
+export function writeConfig(window: unknown, key: string, value: string | number): void {
   const set = asPoiWindow(window).config?.set
   if (typeof set !== 'function') {
     return

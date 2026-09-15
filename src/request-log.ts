@@ -12,10 +12,10 @@
  */
 
 /**
- * How many entries to keep by default, and the most poi's config may ask for —
- * this log lives in the renderer, so it stays bounded whatever the config says.
+ * How many entries to keep unless poi's config says otherwise. Only a default:
+ * the config may ask for more, and an entry is a few short strings.
  */
-export const RECENT_REQUEST_LIMIT = 100
+export const DEFAULT_RECENT_LIMIT = 100
 
 export type RequestLogEntry = {
   at: number
@@ -75,5 +75,5 @@ export function describeRequest(message: unknown, at: number): RequestLogEntry |
 export const appendRequest = (
   recent: readonly RequestLogEntry[],
   entry: RequestLogEntry,
-  limit: number = RECENT_REQUEST_LIMIT,
+  limit: number = DEFAULT_RECENT_LIMIT,
 ): RequestLogEntry[] => [entry, ...recent].slice(0, Math.max(0, limit))

@@ -1,4 +1,5 @@
 import { makeBattleReader } from './src/battles.ts'
+import { PORT_CONFIG_KEY, RECENT_CONFIG_KEY } from './src/config.ts'
 import {
   isMainWindow,
   readAppDataPath,
@@ -6,16 +7,14 @@ import {
   readPortConfig,
   resolveGetStore,
 } from './src/poi.ts'
-import { RECENT_REQUEST_LIMIT } from './src/request-log.ts'
 import { loadQuestLineDb, withQuestLine } from './src/questline.ts'
+import { DEFAULT_RECENT_LIMIT } from './src/request-log.ts'
+import { SettingsPanel } from './src/settings.ts'
 import { DEFAULT_PORT, startMcpServer, type ServerHandle } from './src/server.ts'
 import { setStatus, StatusPanel } from './src/status.ts'
 import { withTimeout } from './src/timeout.ts'
 
-export const PORT_CONFIG_KEY = 'plugin.mcp.port'
-
-/** How many recent requests the status panel keeps. 1..RECENT_REQUEST_LIMIT. */
-export const RECENT_CONFIG_KEY = 'plugin.mcp.recentRequests'
+export { PORT_CONFIG_KEY, RECENT_CONFIG_KEY } from './src/config.ts'
 
 /**
  * Startup must either succeed or say why, within a bounded time. Silence is the
@@ -28,6 +27,9 @@ const LOG_PREFIX = '[poi-plugin-nanodesu-mcp]'
 let handle: ServerHandle | undefined
 
 export const reactClass = StatusPanel
+
+/** poi's settings page renders this; see src/settings.ts. */
+export const settingsClass = SettingsPanel
 
 export const pluginDidLoad = (): void => {
   const poiWindow = typeof window === 'undefined' ? undefined : window
@@ -57,9 +59,9 @@ export const pluginDidLoad = (): void => {
 
   const port = readPortConfig(poiWindow, PORT_CONFIG_KEY, DEFAULT_PORT)
   const recentLimit = readIntConfig(poiWindow, RECENT_CONFIG_KEY, {
-    fallback: RECENT_REQUEST_LIMIT,
+    fallback: DEFAULT_RECENT_LIMIT,
     min: 1,
-    max: RECENT_REQUEST_LIMIT,
+    max: Number.MAX_SAFE_INTEGER,
   })
   console.log(`${LOG_PREFIX} starting on port ${port}…`)
 

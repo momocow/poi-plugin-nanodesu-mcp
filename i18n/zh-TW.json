@@ -14,5 +14,8 @@
   "Local scope": "本機範圍",
   "Copy": "複製",
   "Copied": "已複製",
-  "Recent requests": "最近的請求"
+  "Recent requests": "最近的請求",
+  "Port": "連接埠",
+  "Recent requests kept": "保留的請求筆數",
+  "Takes effect the next time the plugin is loaded.": "重新載入插件後生效。"
 }

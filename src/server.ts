@@ -10,7 +10,7 @@ import { type ReadBattle } from './battles.ts'
 import {
   appendRequest,
   describeRequest,
-  RECENT_REQUEST_LIMIT,
+  DEFAULT_RECENT_LIMIT,
   type RequestLogEntry,
 } from './request-log.ts'
 import {
@@ -62,7 +62,7 @@ export type ServerOptions = {
   onStatus?: (status: ServerStatus) => void
   /** Path to publish the listening port to. `null` disables it. */
   portFile?: string | null
-  /** How many request-log entries to keep (default RECENT_REQUEST_LIMIT). */
+  /** How many request-log entries to keep (default DEFAULT_RECENT_LIMIT). */
   recentLimit?: number
 }
 
@@ -325,7 +325,7 @@ const readBody = (req: IncomingMessage): Promise<string> =>
 
 export async function startMcpServer(options: ServerOptions): Promise<ServerHandle> {
   const host = options.host ?? '127.0.0.1'
-  const recentLimit = Math.max(0, options.recentLimit ?? RECENT_REQUEST_LIMIT)
+  const recentLimit = Math.max(0, options.recentLimit ?? DEFAULT_RECENT_LIMIT)
   const { StreamableHTTPServerTransport } = await loadSdk()
 
   const status: ServerStatus = { state: 'stopped', requestCount: 0, recent: [] }

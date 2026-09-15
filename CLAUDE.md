@@ -75,9 +75,15 @@ for the full design rationale; the essentials:
   newest-first log. Entries are not attributed to a client: MCP carries the
   caller's identity only in `initialize`'s `clientInfo`, and this server is
   stateless with no session id, so nothing ties that identity to the tool calls
-  that follow. `RECENT_REQUEST_LIMIT` (100) is both the default and the ceiling;
-  `plugin.mcp.recentRequests` in poi's config picks a smaller number
-  (`index.ts`, via `readIntConfig`).
+  that follow. `DEFAULT_RECENT_LIMIT` (100) is only a default; `recentRequests`
+  in poi's config picks any number ≥ 1 (`index.ts`, via `readIntConfig`).
+- **`src/config.ts`** owns the keys this plugin writes into poi's config, all
+  under `plugin.<poiPlugin.id>.*`. poi's config is one shared tree with no
+  per-plugin isolation, so the namespace has to be the plugin's own identity —
+  not `plugin.mcp.*`, where a second MCP plugin would collide.
+- **`src/settings.ts`** is the `settingsClass` poi's settings page renders
+  (port, and how many requests the log keeps). poi derives no UI from config
+  keys: without this component the settings exist only in `config.cson`.
 - **`src/validator.ts`** replaces the MCP SDK's Ajv-based schema validator with
   a passthrough. Necessary because poi puts its own `node_modules` (with Ajv 6)
   ahead of the SDK's bundled Ajv 8 on the require path, and the version

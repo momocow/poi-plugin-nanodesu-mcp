@@ -1,7 +1,8 @@
 import React from 'react'
 
 import { translate } from './i18n.ts'
-import { readStringConfig, writeStringConfig } from './poi.ts'
+import { SCOPE_CONFIG_KEY } from './config.ts'
+import { readStringConfig, writeConfig } from './poi.ts'
 import type { ServerStatus } from './server.ts'
 
 const poiWindow = (): unknown => (typeof window === 'undefined' ? undefined : window)
@@ -53,9 +54,6 @@ const SCOPE_LABELS: Record<Scope, string> = {
   project: 'Project scope',
   local: 'Local scope',
 }
-
-/** Kept in poi's config so the choice survives a panel remount or a restart. */
-export const SCOPE_CONFIG_KEY = 'plugin.mcp.scope'
 
 const DEFAULT_SCOPE: Scope = 'local'
 
@@ -143,7 +141,7 @@ export class StatusPanel extends React.Component<
    */
   private selectScope = (scope: Scope) => {
     const { edited } = this.state
-    writeStringConfig(poiWindow(), SCOPE_CONFIG_KEY, scope)
+    writeConfig(poiWindow(), SCOPE_CONFIG_KEY, scope)
     this.setState({
       scope,
       edited: edited === null ? null : edited.replace(/--scope(\s+|=)\S+/, `--scope$1${scope}`),

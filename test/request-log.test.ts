@@ -4,7 +4,7 @@ import { test, describe } from 'node:test'
 import {
   appendRequest,
   describeRequest,
-  RECENT_REQUEST_LIMIT,
+  DEFAULT_RECENT_LIMIT,
   type RequestLogEntry,
 } from '../src/request-log.ts'
 
@@ -95,11 +95,11 @@ describe('appendRequest', () => {
 
   test('drops the oldest entries past the default cap', () => {
     let recent: RequestLogEntry[] = []
-    for (let at = 0; at <= RECENT_REQUEST_LIMIT; at += 1) {
+    for (let at = 0; at <= DEFAULT_RECENT_LIMIT; at += 1) {
       recent = appendRequest(recent, entry(at))
     }
-    assert.equal(recent.length, RECENT_REQUEST_LIMIT)
-    assert.equal(recent[0]?.at, RECENT_REQUEST_LIMIT)
+    assert.equal(recent.length, DEFAULT_RECENT_LIMIT)
+    assert.equal(recent[0]?.at, DEFAULT_RECENT_LIMIT)
     assert.equal(recent.at(-1)?.at, 1)
   })
 })
