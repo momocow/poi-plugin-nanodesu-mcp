@@ -95,6 +95,12 @@ poi_battle ids=[...] select=["fleet.main[].api_ship_id"]
 報「配置已變動」。寧可說「我不知道」，也不要把名字貼錯欄位——後者看起來完全
 正常。
 
+**時區**：store 裡混著三種時鐘，而且字串都不帶標記——遊戲自己的 `api_*_time_str`
+是 **JST（UTC+9）**，某些插件（如 battle-detail 的 `time`）用**主機時區**格式化，
+`timeRange` 的 `from`／`to` 則是 **UTC**。所以要比較、要排序，一律用 epoch 數值
+（`api_*_time`、`time_`、`min`／`max`），不要用字串。遊戲的每日邊界（例如任務
+05:00 重置）同樣在 JST 上。相關路徑讀取時會附警語。
+
 對於每列帶時間戳的日誌（航海日誌 EX 各表、`ext.poi-plugin-battle-detail._.indexes`），
 `poi_describe` 還會回傳 **`timeRange`**——該分支實際涵蓋的最舊與最新時刻，同時給
 原始毫秒值（可直接拿去 `where` 比較）與 ISO 字串。這是**資料視界**：`where` 篩不到

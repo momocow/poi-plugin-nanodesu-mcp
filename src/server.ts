@@ -302,7 +302,10 @@ async function buildMcpServer(
         'it returns the real column names in place of "0", "1", ... , and a note where a field ' +
         'means something here that it does not mean elsewhere. For a log whose rows carry a ' +
         'timestamp it also returns timeRange: the oldest and newest instant the branch actually ' +
-        'holds, both as stored and as ISO. Read it before concluding anything from an empty ' +
+        'holds, as stored (min/max) and as UTC ISO (from/to). Beware that the store mixes ' +
+        'clocks: the game\'s own api_*_time_str strings are JST, some plugins format theirs in ' +
+        'the host timezone, and none of those strings carries a marker — compare on epochs, not ' +
+        'on strings. Read timeRange before concluding anything from an empty ' +
         'result — outside that range a filter matches nothing because the data does not reach ' +
         'that far, which is not the same as nothing having happened.',
       inputSchema: {

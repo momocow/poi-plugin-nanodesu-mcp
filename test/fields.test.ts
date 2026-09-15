@@ -74,6 +74,23 @@ describe('describeFields', () => {
     assert.match(described.note ?? '', /info\.ships/)
   })
 
+  test('warns that the game formats its own time strings in JST', () => {
+    // An unlabelled "17:44:39" reads as a local time and is wrong by the
+    // reader's offset — the same class of trap as the roster id above, except
+    // that here the colliding name is "time".
+    for (const path of ['info.repairs', 'info.constructions']) {
+      const described = describeFields(path, [{ api_complete_time_str: '0' }])
+      assert.match(described.note ?? '', /JST/, `${path} should name the game clock`)
+      assert.match(described.note ?? '', /api_\*_time\b/, `${path} should point at the epoch`)
+    }
+  })
+
+  test('warns that a battle index carries a third clock again', () => {
+    const described = describeFields('ext.poi-plugin-battle-detail._.indexes', [{ time_: 1 }])
+    assert.match(described.note ?? '', /time_/)
+    assert.match(described.note ?? '', /host/i)
+  })
+
   test('does not claim a layout for a value that is not an array', () => {
     assert.equal(describeFields('info.resources', { fuel: 1 }).fields, undefined)
   })

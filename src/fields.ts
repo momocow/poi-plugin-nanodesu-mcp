@@ -197,6 +197,30 @@ export const FIELD_TABLE: Record<string, FieldEntry> = {
  * flag it. They belong here for the same reason the field names do — the caller
  * learns it from this server or learns it from a wrong answer.
  */
+/**
+ * The game's clock, which is not the reader's.
+ *
+ * kcsapi's `api_*_time_str` fields are formatted by the game server in JST and
+ * carry no offset, so they read as perfectly ordinary local times and are wrong
+ * by the reader's offset.
+ *
+ * Observed on a live *repair* dock: `api_complete_time_str` of
+ * "2026-09-15 17:44:39" for an `api_complete_time` that is 16:44:39 in UTC+8 and
+ * 17:44:39 in Asia/Tokyo. The construction docks were empty at the time, so the
+ * same claim there rests on it being the same field, from the same server, in
+ * the same response — strong, but one step short of observed, and the note says
+ * so rather than borrowing the repair dock's evidence.
+ *
+ * The epoch field beside it is the unambiguous one, which is why this points at
+ * it rather than merely warning.
+ */
+const GAME_CLOCK_NOTE =
+  'the api_*_time_str strings here are on the *game* clock, JST (UTC+9), and carry no timezone ' +
+  'marker — so they look like local times and are off by your offset. Observed on a repair ' +
+  'dock: "2026-09-15 17:44:39" for an instant that is 16:44:39 in UTC+8. Use the ' +
+  'api_*_time epoch beside it. The game\'s own daily boundaries, such as the 05:00 quest ' +
+  'reset, are on this clock too.'
+
 export const PATH_NOTES: Record<string, string> = {
   'info.resources':
     'these positions are their own id space: index = kcsapi material id - 1, and unrelated to ' +
@@ -205,7 +229,14 @@ export const PATH_NOTES: Record<string, string> = {
   'info.repairs':
     "api_ship_id here is the *roster* id (a key into info.ships), not a master ship id as the " +
     'same field name means elsewhere. poi_lookup(kind="ships") on it resolves to an unrelated ' +
-    'ship rather than failing; read info.ships[<that value>].api_ship_id first.',
+    'ship rather than failing; read info.ships[<that value>].api_ship_id first. Also: ' +
+    GAME_CLOCK_NOTE,
+  'info.constructions': GAME_CLOCK_NOTE,
+  [`ext.${BATTLE_DETAIL_PACKAGE}._.indexes`]:
+    'two time fields, two meanings, neither labelled: time_ is the epoch in milliseconds, while ' +
+    'time is a display string this plugin formatted in the *host* timezone — a third clock ' +
+    'again, being neither the game\'s JST nor the UTC that timeRange reports. Sort and compare ' +
+    'on time_.',
 }
 
 /** Prefix of the paths whose annotation depends on which akashic fork is installed. */
@@ -251,7 +282,13 @@ export type TimeRange = {
   /** Oldest and newest, as stored — what a `where` expression compares against. */
   min: number
   max: number
-  /** The same two instants, readable. */
+  /**
+   * The same two instants, readable, in **UTC** (ISO 8601, with its `Z`).
+   *
+   * Deliberately a third clock from the two the data carries — the game's JST
+   * strings and a plugin's host-local ones — and the only one of the three that
+   * says so. Anything being compared or filtered should use `min`/`max`.
+   */
   from: string
   to: string
   /** How many rows carried a usable instant. */
