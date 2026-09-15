@@ -1,14 +1,35 @@
 # poi-plugin-chinjufu-mcp
 
-一個 [poi](https://github.com/poooi/poi) 外掛，把 poi 當下的艦隊收藏品遊戲狀態
+一個 [poi](https://github.com/poooi/poi) 插件，把 poi 當下的艦隊收藏品遊戲狀態
 以唯讀工具的形式開放給 MCP 客戶端（Claude Code，或任何說 MCP 的 agent）。
 不必去撈 poi 的快取檔，也沒有過期問題：每一次呼叫讀的都是遊戲正在跑的那個
 redux store。
 
+## 核心概念
+
+這個插件的目的是**把 poi 以及其他插件的 state 開放給 agent 查詢**，
+並且**整合一部分並非 state、但同樣實用的資料**。
+
+所以可讀的東西分成三類，界線值得先弄清楚：
+
+| 類別 | 例子 | 來源 |
+| --- | --- | --- |
+| poi 自己的 state | `info.ships`、`info.quests`、`fcd.map` | redux store |
+| 其他插件的 state | `ext.poi-plugin-quest-line._.questList`、`ext.poi-plugin-battle-detail._.indexes` | redux store（允許清單控管） |
+| 非 state 的實用資料 | `questline.quests`（任務線圖）、`poi_battle`（單場戰鬥記錄） | 插件隨附的靜態資產、或寫在磁碟上的記錄 |
+
+第三類是刻意納入的：有些資料對 agent 極有價值，卻從來不進 redux——任務線圖
+是插件 `require()` 進模組區域變數的靜態資產，戰鬥記錄則是一場一個 gz 檔寫在
+磁碟上。單靠讀 store 永遠拿不到它們，所以這個插件把它們一併整合進來，
+用同一套查詢介面提供。
+
+整合僅止於「讓它可查」。這個插件不做推論、不產生衍生欄位、不做名稱解析——
+把任務線圖和你的進度接起來、或從編成回推任務是否達成，都是 agent 的工作。
+
 ## 為什麼
 
 poi 本來就把完整的遊戲狀態（艦娘、艦隊、資源、主資料……）放在記憶體裡，
-而且是從遊戲 API 收到的當下就更新。這個外掛在那個 store 前面架了一台 MCP
+而且是從遊戲 API 收到的當下就更新。這個插件在那個 store 前面架了一台 MCP
 伺服器，讓 agent 直接查詢，不用去刮 poi 的磁碟快取，也不用從原始 `kcsapi`
 封包重新推導狀態。
 
@@ -16,23 +37,23 @@ poi 本來就把完整的遊戲狀態（艦娘、艦隊、資源、主資料…�
 
 ## 安裝
 
-把這個 repo 用 symlink 掛進 poi 的外掛目錄（沒有發佈到 npm）：
+把這個 repo 用 symlink 掛進 poi 的插件目錄（沒有發佈到 npm）：
 
 ```sh
 ln -s /path/to/poi-plugin-chinjufu-mcp \
   "$HOME/Library/Application Support/poi/plugins/node_modules/poi-plugin-chinjufu-mcp"
 ```
 
-然後在 poi 裡重載外掛（或重啟 poi）。本專案以原始 TypeScript 發佈、沒有建置
-步驟——poi 會在 `require()` 時即時轉譯 `.ts`，所以改完程式碼，下次重載外掛就
+然後在 poi 裡重載插件（或重啟 poi）。本專案以原始 TypeScript 發佈、沒有建置
+步驟——poi 會在 `require()` 時即時轉譯 `.ts`，所以改完程式碼，下次重載插件就
 生效。
 
 伺服器只在 poi 的**主視窗**啟動，而且要等 poi 給出可用的 `getStore()` 之後。
-狀態（listening／stopped／error、端點網址、請求計數）會顯示在 poi 的外掛面板。
+狀態（listening／stopped／error、端點網址、請求計數）會顯示在 poi 的插件面板。
 
 ## 連接 agent
 
-外掛開始監聽後（預設 `http://127.0.0.1:12450/mcp`）：
+插件開始監聽後（預設 `http://127.0.0.1:12450/mcp`）：
 
 ```sh
 claude mcp add poi --transport http http://127.0.0.1:12450/mcp
@@ -72,16 +93,16 @@ claude mcp add poi --transport http http://127.0.0.1:12450/mcp
 單一記錄只支援 `select`。`maxBytes` 限制序列化後的回應大小（預設 65536，
 硬上限 262144）；集合會被截斷到塞得下，單一過大的記錄則直接回報錯誤。
 
-#### 外掛狀態（`ext`）
+#### 插件狀態（`ext`）
 
-允許清單內的外掛狀態可以一次讀一個，例如 Logbook 的出擊紀錄在
+允許清單內的插件狀態可以一次讀一個，例如 Logbook 的出擊紀錄在
 `ext.poi-plugin-akashic-records._.attack.data`（那個 `_` 是 poi 自己包在每個
-外掛 reducer 外面的一層）。`ext` 整包不可讀。
+插件 reducer 外面的一層）。`ext` 整包不可讀。
 
-外掛是以**完整的 poi 套件名**比對，所以分支版本算另一筆——Logbook EX 分支是
+插件是以**完整的 poi 套件名**比對，所以分支版本算另一筆——Logbook EX 分支是
 `ext.poi-plugin-akashic-records-ex`。
 
-某些外掛只開放**部分**子路徑，詳見下面的戰鬥索引。
+某些插件只開放**部分**子路徑，詳見下面的戰鬥索引。
 
 #### `questline`：任務線圖
 
@@ -90,13 +111,29 @@ claude mcp add poi --transport http http://127.0.0.1:12450/mcp
 包含 `prereqIds` 與 `unlocks`（也就是圖的邊），以及 `wikiId`、`name`、
 `category`、`period` 和獎勵欄位。
 
-它被掛成一個根，好讓同一套 `where`／`select` 機制直接讀；該外掛沒安裝時這個根
+它被掛成一個根，好讓同一套 `where`／`select` 機制直接讀；該插件沒安裝時這個根
 就不存在。它是「遊戲裡存在哪些任務」的凍結目錄，**完全不反映你的進度**——要把
-它和即時狀態接起來是 agent 的工作，不是這個外掛的。
+它和即時狀態接起來是 agent 的工作，不是這個插件的。
 
-> **注意文字是簡體。** 這份資料的文字欄位是簡體中文，而且在 `where` 裡必須加
-> 引號——裸字會被當成欄位名，`category = 出击` 是語法錯誤而不是比對。
-> 所以要寫 `category = "出击"`（簡體）；寫成 `"出擊"`（繁體）**查不到任何東西**。
+> **字形陷阱：同一個字有三種寫法。** 這份目錄的文字欄位是**簡體中文**，
+> 而同一個概念在這個專案裡三種字形都會出現，很容易寫錯：
+>
+> | 字形 | 寫法 | 碼位 | 出現在 |
+> | --- | --- | --- | --- |
+> | 簡體 | `出击` | U+51FB | `questline.quests` 的 `category`／`name`／`desc` |
+> | 繁體 | `出擊` | U+64CA | `ext.poi-plugin-battle-detail._.indexes` 的 `desc` |
+> | 日文 | `出撃` | U+6483 | 遊戲原文；`questline.quests` 的 `nameJa` 欄位 |
+>
+> 最清楚的例證是任務 201 —— **同一筆記錄的兩個欄位**寫著同一個字：
+> `name` 是「击破敌舰队」，`nameJa` 是「敵艦隊を撃破せよ！」。
+> 全表 119 筆 `name` 含簡體 `击`、132 筆 `nameJa` 含日文 `撃`，
+> 而含繁體 `擊` 的 `name` 是 **0 筆**。
+>
+> 所以查任務要用簡體：`category = "出击"` 才命中，寫成繁體 `"出擊"` 會回傳
+> **0 筆**（已實測），而且不會報錯。查戰鬥索引則相反，那裡是繁體。
+>
+> 另外 `where` 裡的中文**必須加引號**——裸字會被當成欄位名，
+> `category = 出击` 是語法錯誤而不是比對不到。
 
 走訪這張圖用 `prereqIds contains <id>` 和 `unlocks contains <id>`；沒有前置
 條件的 49 個任務是 `depth = 0`。
@@ -171,7 +208,7 @@ poi_battle ids=[...] select=["fleet.main[].api_ship_id"]
 
 ---
 
-這個外掛本身不做名稱解析，也不產生衍生欄位——回傳的都是原始 `kcsapi` 資料；
+這個插件本身不做名稱解析，也不產生衍生欄位——回傳的都是原始 `kcsapi` 資料；
 把 id 接成名稱是 `poi_lookup` 的事，而詮釋結果是 agent 的事。
 
 ## 開發
@@ -193,7 +230,7 @@ node --import tsx scripts/live-check.ts
 
 ## 翻譯
 
-外掛的 UI 字串（標題、描述、狀態面板）透過 poi 自己的 i18n 機制翻譯，
+插件的 UI 字串（標題、描述、狀態面板）透過 poi 自己的 i18n 機制翻譯，
 見 `i18n/*.json`。已包含繁體中文（`zh-TW`）；其他 poi 語系（`en-US`、`ja-JP`、
 `zh-CN`、`ko-KR`）在翻譯補上之前，會回退到英文原文。
 
