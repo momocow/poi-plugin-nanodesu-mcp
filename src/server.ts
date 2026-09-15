@@ -178,7 +178,10 @@ async function buildMcpServer(
               'exists. Fields may be nested or indexed (api_exp[0]), and a row that is itself ' +
               'an array is addressed by position ([0], [1]). ' +
               'Examples: "api_nowhp < api_maxhp", "api_lv >= 99 and api_locked = 1", ' +
-              '"api_ship_id in [487, 213]", "api_sally_area exists".',
+              '"api_ship_id in [487, 213]", "api_sally_area exists". ' +
+              'Chinese text must be quoted, and the glyph form matters: questline.quests is ' +
+              'Simplified (category = "出击"), while ext.poi-plugin-battle-detail indexes are ' +
+              'Traditional ("出擊"). The wrong form matches nothing and does not error.',
           ),
         select: z
           .array(z.string())
