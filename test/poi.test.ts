@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict'
 import { test, describe } from 'node:test'
 
-import { isMainWindow, readPortConfig, resolveGetStore } from '../src/poi.ts'
+import {
+  isMainWindow,
+  readIntConfig,
+  readPortConfig,
+  readStringConfig,
+  resolveGetStore,
+  writeStringConfig,
+} from '../src/poi.ts'
 
 describe('isMainWindow', () => {
   test('is true only when poi marks the window as main', () => {
@@ -89,5 +96,115 @@ describe('readPortConfig', () => {
         `expected fallback for ${JSON.stringify(value)}`,
       )
     }
+  })
+})
+
+describe('readStringConfig', () => {
+  test('reads the configured string', () => {
+    const window = { config: { get: () => 'project' } }
+    assert.equal(readStringConfig(window, 'plugin.mcp.scope'), 'project')
+  })
+
+  test('passes the key through to poi', () => {
+    const seen: unknown[] = []
+    const window = { config: { get: (path: string) => seen.push(path) && undefined } }
+    readStringConfig(window, 'plugin.mcp.scope')
+    assert.deepEqual(seen, ['plugin.mcp.scope'])
+  })
+
+  test('is undefined when poi has no config object', () => {
+    assert.equal(readStringConfig({}, 'plugin.mcp.scope'), undefined)
+  })
+
+  test('is undefined when config.get throws', () => {
+    const window = {
+      config: {
+        get: () => {
+          throw new Error('config exploded')
+        },
+      },
+    }
+    assert.equal(readStringConfig(window, 'plugin.mcp.scope'), undefined)
+  })
+
+  test('is undefined for a non-string or empty value', () => {
+    for (const value of [42, null, '', {}]) {
+      const window = { config: { get: () => value } }
+      assert.equal(
+        readStringConfig(window, 'plugin.mcp.scope'),
+        undefined,
+        `expected undefined for ${JSON.stringify(value)}`,
+      )
+    }
+  })
+})
+
+describe('writeStringConfig', () => {
+  test('writes through to poi’s config', () => {
+    const seen: unknown[] = []
+    const window = { config: { set: (path: string, value: unknown) => seen.push(path, value) } }
+    writeStringConfig(window, 'plugin.mcp.scope', 'user')
+    assert.deepEqual(seen, ['plugin.mcp.scope', 'user'])
+  })
+
+  test('does nothing when poi has no config.set', () => {
+    assert.doesNotThrow(() => writeStringConfig({ config: {} }, 'plugin.mcp.scope', 'user'))
+  })
+
+  test('swallows a throwing config.set', () => {
+    const window = {
+      config: {
+        set: () => {
+          throw new Error('config exploded')
+        },
+      },
+    }
+    assert.doesNotThrow(() => writeStringConfig(window, 'plugin.mcp.scope', 'user'))
+  })
+})
+
+describe('readIntConfig', () => {
+  const bounds = { fallback: 100, min: 1, max: 100 }
+
+  test('reads a value inside the range', () => {
+    const window = { config: { get: () => 25 } }
+    assert.equal(readIntConfig(window, 'plugin.mcp.recentRequests', bounds), 25)
+  })
+
+  test('passes the key and fallback through to poi', () => {
+    const seen: unknown[] = []
+    const window = {
+      config: {
+        get: (path: string, fallback: number) => {
+          seen.push(path, fallback)
+          return fallback
+        },
+      },
+    }
+    readIntConfig(window, 'plugin.mcp.recentRequests', bounds)
+    assert.deepEqual(seen, ['plugin.mcp.recentRequests', 100])
+  })
+
+  test('falls back for a value outside the range or not an integer', () => {
+    for (const value of [0, -1, 101, 2.5, '25', null, undefined]) {
+      const window = { config: { get: () => value } }
+      assert.equal(
+        readIntConfig(window, 'plugin.mcp.recentRequests', bounds),
+        100,
+        `expected fallback for ${JSON.stringify(value)}`,
+      )
+    }
+  })
+
+  test('falls back when poi has no config or the read throws', () => {
+    assert.equal(readIntConfig({}, 'plugin.mcp.recentRequests', bounds), 100)
+    const window = {
+      config: {
+        get: () => {
+          throw new Error('config exploded')
+        },
+      },
+    }
+    assert.equal(readIntConfig(window, 'plugin.mcp.recentRequests', bounds), 100)
   })
 })

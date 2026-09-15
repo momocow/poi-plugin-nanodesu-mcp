@@ -8,6 +8,12 @@ import { z } from 'zod'
 
 import { type ReadBattle } from './battles.ts'
 import {
+  appendRequest,
+  describeRequest,
+  RECENT_REQUEST_LIMIT,
+  type RequestLogEntry,
+} from './request-log.ts'
+import {
   LOOKUP_KINDS,
   poiBattle,
   poiDescribe,
@@ -43,6 +49,8 @@ export type ServerStatus = {
   error?: string
   lastRequestAt?: number
   requestCount: number
+  /** Newest first, capped. See src/request-log.ts. */
+  recent: RequestLogEntry[]
 }
 
 export type ServerOptions = {
@@ -54,6 +62,8 @@ export type ServerOptions = {
   onStatus?: (status: ServerStatus) => void
   /** Path to publish the listening port to. `null` disables it. */
   portFile?: string | null
+  /** How many request-log entries to keep (default RECENT_REQUEST_LIMIT). */
+  recentLimit?: number
 }
 
 export type ServerHandle = {
@@ -315,9 +325,10 @@ const readBody = (req: IncomingMessage): Promise<string> =>
 
 export async function startMcpServer(options: ServerOptions): Promise<ServerHandle> {
   const host = options.host ?? '127.0.0.1'
+  const recentLimit = Math.max(0, options.recentLimit ?? RECENT_REQUEST_LIMIT)
   const { StreamableHTTPServerTransport } = await loadSdk()
 
-  const status: ServerStatus = { state: 'stopped', requestCount: 0 }
+  const status: ServerStatus = { state: 'stopped', requestCount: 0, recent: [] }
   const report = () => options.onStatus?.({ ...status })
 
   const storeReady = (): boolean => {
@@ -373,6 +384,15 @@ export async function startMcpServer(options: ServerOptions): Promise<ServerHand
       )
       return
     }
+
+    // A batch is several requests in one POST, so each gets its own entry.
+    for (const message of Array.isArray(body) ? body : [body]) {
+      const entry = describeRequest(message, status.lastRequestAt ?? Date.now())
+      if (entry !== undefined) {
+        status.recent = appendRequest(status.recent, entry, recentLimit)
+      }
+    }
+    report()
 
     // Stateless: a fresh server and transport per request. These tools are
     // read-only with no subscriptions, so there is no session state worth

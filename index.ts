@@ -1,11 +1,21 @@
 import { makeBattleReader } from './src/battles.ts'
-import { isMainWindow, readAppDataPath, readPortConfig, resolveGetStore } from './src/poi.ts'
+import {
+  isMainWindow,
+  readAppDataPath,
+  readIntConfig,
+  readPortConfig,
+  resolveGetStore,
+} from './src/poi.ts'
+import { RECENT_REQUEST_LIMIT } from './src/request-log.ts'
 import { loadQuestLineDb, withQuestLine } from './src/questline.ts'
 import { DEFAULT_PORT, startMcpServer, type ServerHandle } from './src/server.ts'
 import { setStatus, StatusPanel } from './src/status.ts'
 import { withTimeout } from './src/timeout.ts'
 
 export const PORT_CONFIG_KEY = 'plugin.mcp.port'
+
+/** How many recent requests the status panel keeps. 1..RECENT_REQUEST_LIMIT. */
+export const RECENT_CONFIG_KEY = 'plugin.mcp.recentRequests'
 
 /**
  * Startup must either succeed or say why, within a bounded time. Silence is the
@@ -30,6 +40,7 @@ export const pluginDidLoad = (): void => {
       state: 'stopped',
       error: 'not the main window — the server runs only in poi’s main window',
       requestCount: 0,
+      recent: [],
     })
     return
   }
@@ -40,11 +51,16 @@ export const pluginDidLoad = (): void => {
   } catch (e) {
     const error = e instanceof Error ? e.message : String(e)
     console.error(`${LOG_PREFIX} cannot reach poi's store:`, e)
-    setStatus({ state: 'error', error, requestCount: 0 })
+    setStatus({ state: 'error', error, requestCount: 0, recent: [] })
     return
   }
 
   const port = readPortConfig(poiWindow, PORT_CONFIG_KEY, DEFAULT_PORT)
+  const recentLimit = readIntConfig(poiWindow, RECENT_CONFIG_KEY, {
+    fallback: RECENT_REQUEST_LIMIT,
+    min: 1,
+    max: RECENT_REQUEST_LIMIT,
+  })
   console.log(`${LOG_PREFIX} starting on port ${port}…`)
 
   const appDataPath = readAppDataPath(poiWindow)
@@ -69,6 +85,7 @@ export const pluginDidLoad = (): void => {
       getStore: () => withQuestLine(getStore(), questLine),
       readBattle,
       port,
+      recentLimit,
       onStatus: setStatus,
     }),
     START_TIMEOUT_MS,
@@ -83,7 +100,7 @@ export const pluginDidLoad = (): void => {
       // a fallback port: that would silently change the URL and break an
       // agent's config while appearing to work.
       const error = e instanceof Error ? e.message : String(e)
-      setStatus({ state: 'error', error, requestCount: 0 })
+      setStatus({ state: 'error', error, requestCount: 0, recent: [] })
       console.error(`${LOG_PREFIX} failed to start:`, e)
     })
 }
@@ -97,5 +114,5 @@ export const pluginWillUnload = (): void => {
   started.close().catch((e: unknown) => {
     console.error(`${LOG_PREFIX} failed to stop cleanly:`, e)
   })
-  setStatus({ state: 'stopped', requestCount: 0 })
+  setStatus({ state: 'stopped', requestCount: 0, recent: [] })
 }

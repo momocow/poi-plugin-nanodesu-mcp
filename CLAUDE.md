@@ -70,6 +70,14 @@ for the full design rationale; the essentials:
 - **`src/serialize.ts`** makes any store value JSON-safe (drops functions/cycles,
   caps depth) and enforces the `maxBytes` response cap, binary-searching the
   largest prefix of a collection that fits rather than erroring outright.
+- **`src/request-log.ts`** turns each incoming JSON-RPC message into a status
+  panel entry (time, method, tool, one telling argument) and keeps a bounded
+  newest-first log. Entries are not attributed to a client: MCP carries the
+  caller's identity only in `initialize`'s `clientInfo`, and this server is
+  stateless with no session id, so nothing ties that identity to the tool calls
+  that follow. `RECENT_REQUEST_LIMIT` (100) is both the default and the ceiling;
+  `plugin.mcp.recentRequests` in poi's config picks a smaller number
+  (`index.ts`, via `readIntConfig`).
 - **`src/validator.ts`** replaces the MCP SDK's Ajv-based schema validator with
   a passthrough. Necessary because poi puts its own `node_modules` (with Ajv 6)
   ahead of the SDK's bundled Ajv 8 on the require path, and the version

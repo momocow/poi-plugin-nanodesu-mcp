@@ -5,7 +5,7 @@ import { test, describe, before, after } from 'node:test'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 
-import { startMcpServer, type ServerHandle } from '../src/server.ts'
+import { startMcpServer, type ServerHandle, type ServerStatus } from '../src/server.ts'
 import store from './fixtures/store.json' with { type: 'json' }
 
 type TextContent = { type: string; text: string }
@@ -236,5 +236,65 @@ describe('mcp server over http', () => {
       /EADDRINUSE|in use/i,
     )
     await first.close()
+  })
+})
+
+describe('status reporting', () => {
+  test('logs each request for the status panel', async () => {
+    const seen: ServerStatus[] = []
+    const handle = await startMcpServer({
+      getStore: () => store,
+      port: 0,
+      portFile: null,
+      onStatus: (status) => seen.push(status),
+    })
+    const client = new Client({ name: 'test-client', version: '1.0.0' })
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${handle.port}/mcp`)),
+    )
+    await client.callTool({ name: 'poi_get', arguments: { path: 'info.basic' } })
+    await client.close()
+    await handle.close()
+
+    const recent = seen.at(-1)?.recent ?? []
+    assert.deepEqual(
+      { tool: recent[0]?.tool, detail: recent[0]?.detail },
+      { tool: 'poi_get', detail: 'info.basic' },
+      'the newest entry should be the tool call',
+    )
+    assert.ok(
+      recent.some((entry) => entry.method === 'initialize'),
+      'the handshake should be logged too',
+    )
+    assert.ok((recent[0]?.at ?? 0) > 0)
+  })
+})
+
+describe('request log limit', () => {
+  test('keeps only the configured number of entries, oldest out first', async () => {
+    const seen: ServerStatus[] = []
+    const handle = await startMcpServer({
+      getStore: () => store,
+      port: 0,
+      portFile: null,
+      recentLimit: 2,
+      onStatus: (status) => seen.push(status),
+    })
+    const client = new Client({ name: 'test-client', version: '1.0.0' })
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${handle.port}/mcp`)),
+    )
+    await client.callTool({ name: 'poi_get', arguments: { path: 'info.basic' } })
+    await client.callTool({ name: 'poi_get', arguments: { path: 'info.resources' } })
+    await client.close()
+    await handle.close()
+
+    const recent = seen.at(-1)?.recent ?? []
+    assert.equal(recent.length, 2)
+    assert.deepEqual(
+      recent.map((entry) => entry.detail),
+      ['info.resources', 'info.basic'],
+      'the handshake entries should have aged out',
+    )
   })
 })

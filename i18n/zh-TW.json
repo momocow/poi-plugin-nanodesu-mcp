@@ -8,5 +8,11 @@
   "Requests": "請求數",
   "Last request": "最後請求",
   "none yet": "尚無",
-  "Connect an agent with:": "使用以下指令連接代理程式："
+  "Connect an agent with:": "使用以下指令連接代理程式：",
+  "User scope": "使用者範圍",
+  "Project scope": "專案範圍",
+  "Local scope": "本機範圍",
+  "Copy": "複製",
+  "Copied": "已複製",
+  "Recent requests": "最近的請求"
 }
