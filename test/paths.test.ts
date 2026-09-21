@@ -297,6 +297,32 @@ describe('resolveStorePath for a partly-readable plugin', () => {
   })
 })
 
+describe('resolveStorePath for the senka histories', () => {
+  // The shape v5.5.1's combineReducers produces: plain records of numbers.
+  const senka = {
+    experienceHistory: { 0: 4200000, 1: 4213000, 1000: 4225000 },
+    rank501: { 0: 1800, 1: 1855 },
+    rankUser: { 0: 1200, 1: 1310 },
+    currentRank: 742,
+    excludedQuests: [284],
+  }
+  const store = { info: {}, ext: { 'poi-plugin-senka-calc': { _: senka } } }
+
+  test('reads the plugin state whole', () => {
+    const result = resolveStorePath(store, 'ext.poi-plugin-senka-calc._')
+    assert.deepEqual(result, { ok: true, value: senka })
+  })
+
+  test('reads a single history branch', () => {
+    const result = resolveStorePath(store, 'ext.poi-plugin-senka-calc._.rank501')
+    assert.deepEqual(result, { ok: true, value: senka.rank501 })
+  })
+
+  test('advertises it among the readable branches', () => {
+    assert.ok(readableRoots(store).includes('ext.poi-plugin-senka-calc'))
+  })
+})
+
 describe('resolveStorePath rejects a wildcard', () => {
   test('[] projects across an array and names no branch', () => {
     const result = resolveStorePath({ info: { ships: [] } }, 'info.ships[].api_lv')

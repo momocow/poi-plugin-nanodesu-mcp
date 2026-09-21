@@ -77,6 +77,17 @@ export const ALLOWED_EXT_PLUGINS: Record<string, string> = {
   // Readable only in part — see ALLOWED_EXT_SUBPATHS.
   'poi-plugin-battle-detail':
     'flat index of every saved battle: id, map, route, rank, and the id naming its record file',
+  // The only record of this month's senka: the ranking api returns a page of
+  // the leaderboard and poi keeps none of it, so the thresholds and one's own
+  // standing exist solely in this plugin's histories. All eleven reducers
+  // (`reducers/index.js` in v5.5.1) produce plain numbers, string-keyed records
+  // of numbers, and number arrays — no moment objects, no Immutable, no class
+  // instances. The two archive fields that are *not* reducers are the reason to
+  // say so: `magic` (the nickname-derived key that decrypts the ranking) and
+  // `date` live only in the on-disk achieve file, never in this state.
+  'poi-plugin-senka-calc':
+    'senka histories: ranking thresholds (5/20/100/501), own senka and rank, HQ experience, ' +
+    'EO and quest progress — all plain numbers and number arrays',
 }
 
 /**

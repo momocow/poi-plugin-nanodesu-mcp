@@ -221,7 +221,77 @@ const GAME_CLOCK_NOTE =
   'api_*_time epoch beside it. The game\'s own daily boundaries, such as the 05:00 quest ' +
   'reset, are on this clock too.'
 
+/** The poi package whose senka histories the notes below describe. */
+export const SENKA_PACKAGE = 'poi-plugin-senka-calc'
+
+export const senkaPath = (branch: string): string => `ext.${SENKA_PACKAGE}._.${branch}`
+
+/**
+ * Why every senka history needs a note: its keys are not instants.
+ *
+ * Each of these branches is a `Record<number, …>` whose keys came from
+ * `getDateNo()`/`getRankDateNo()` (that plugin's `lib/util.js`) — the count of
+ * whole 12-hour periods since the start of the current JST month. They are
+ * small integers that reset monthly, and a caller who reads one as an epoch
+ * gets 1970 for every record; one who reads it as a day-of-month is off by a
+ * factor of two. Nothing in the data says which, so this has to.
+ *
+ * The anchor differs by two reducers, and by an hour: experience and quest
+ * records are cut at 02:00 JST on the 1st, ranking records at 03:00 — which is
+ * why the same period number does not name quite the same window across these
+ * branches.
+ *
+ * The sparseness warning is not hypothetical. In a live archive on the 21st
+ * (period 41), `experienceHistory` was missing periods 17, 18, 36 and 37, and
+ * the `rank*` branches held 11 of the 41 — a period exists only if poi saw the
+ * response that fills it, and for the rankings that means the player opened the
+ * in-game ranking page during it.
+ */
+const senkaPeriods = (anchor: string) =>
+  `keys here are 12-hour *period* numbers inside the current JST month, not timestamps and not ` +
+  `days: floor((then - ${anchor} JST on the 1st) / 12h), counting 0, 1, 2, … and starting over ` +
+  `each month. Period 0 is the month's first half-day; even keys are the 02:00-14:00 half, odd ` +
+  `keys the 14:00-02:00 one. Read as an epoch, every record dates to 1970. Keys are sparse: a ` +
+  `period is recorded only if poi saw the response that fills it, so a gap means no observation, ` +
+  `never a zero — do not read consecutive keys as consecutive periods.`
+
+/** Period keys anchored at 02:00 JST (`getDateNo`). */
+const SENKA_DATE_PERIODS = senkaPeriods('02:00')
+
+/** Period keys anchored at 03:00 JST (`getRankDateNo`), one hour later. */
+const SENKA_RANK_PERIODS = senkaPeriods('03:00')
+
+/**
+ * Notes for the senka histories, by store path.
+ *
+ * Source: `poi-plugin-senka-calc` v5.5.1 — `reducers/*.js` for what each branch
+ * holds, `lib/util.js` for the key numbering, `lib/const.js` for the rate and
+ * the EO table.
+ */
+const SENKA_NOTES: Record<string, string> = {
+  [senkaPath('experienceHistory')]:
+    `${SENKA_DATE_PERIODS} One key is not a period at all: **1000 holds the current HQ ` +
+    `experience**, rewritten on every port/battle/mission response. A period key holds the ` +
+    `experience carried *into* that period, so the month's ordinary senka is ` +
+    `(value at 1000 - value at the lowest period key present) * 7/10000.`,
+  [senkaPath('rank5')]: SENKA_RANK_PERIODS,
+  [senkaPath('rank20')]: SENKA_RANK_PERIODS,
+  [senkaPath('rank100')]: SENKA_RANK_PERIODS,
+  [senkaPath('rank501')]: SENKA_RANK_PERIODS,
+  [senkaPath('rankUser')]: SENKA_RANK_PERIODS,
+  [senkaPath('exHistory')]:
+    `${SENKA_DATE_PERIODS} Values are arrays of EO map ids in the game's two-digit form (55 is ` +
+    `map 5-5), recorded in the period the map was first seen cleared. Only the eight maps in ` +
+    `the plugin's own EX_MAPS table are tracked, and in v5.5.1 that table omits 56 (5-6), so ` +
+    `clearing 5-6 never appears here — the game-side senka in the rank branches is unaffected.`,
+  [senkaPath('questHistory')]:
+    `${SENKA_DATE_PERIODS} Values are arrays of senka-quest ids cleared in that period, and ` +
+    `**1000 is again not a period**: it holds quests cleared after this month's quest deadline, ` +
+    `whose senka counts toward next month.`,
+}
+
 export const PATH_NOTES: Record<string, string> = {
+  ...SENKA_NOTES,
   'info.resources':
     'these positions are their own id space: index = kcsapi material id - 1, and unrelated to ' +
     "poi_lookup(kind='useitems') ids, which order instant-repair and instant-build the other " +
