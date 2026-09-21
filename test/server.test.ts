@@ -40,7 +40,9 @@ describe('mcp server over http', () => {
     assert.ok(handle.port > 0)
   })
 
-  test('advertises exactly the four documented tools', async () => {
+  test('advertises exactly the four documented tools, and nothing that writes', async () => {
+    // No dispatch was given, so the server is read-only — the default, and the
+    // reason poi_hensei_save must not appear here.
     const { tools } = await client.listTools()
     assert.deepEqual(
       tools.map((t) => t.name).sort(),
@@ -296,5 +298,77 @@ describe('request log limit', () => {
       ['info.resources', 'info.basic'],
       'the handshake entries should have aged out',
     )
+  })
+})
+
+describe('mcp server with a dispatch', () => {
+  let handle: ServerHandle
+  let client: Client
+  const sent: unknown[] = []
+
+  // A store where hensei-nikki is loaded, so a save is allowed to proceed.
+  const writable = {
+    ...store,
+    ext: { 'poi-plugin-hensei-nikki': { _: { henseiData: { data: {} } } } },
+  }
+
+  before(async () => {
+    handle = await startMcpServer({
+      getStore: () => writable,
+      dispatch: (action) => sent.push(action),
+      hensei: {
+        getHenseiDataByApi: () => [[{ id: 101, lv: 5, slots: [] }]],
+        getHenseiDataByCode: () => [],
+      },
+      port: 0,
+      portFile: null,
+    })
+    client = new Client({ name: 'test-client', version: '1.0.0' })
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${handle.port}/mcp`)),
+    )
+  })
+
+  after(async () => {
+    await client.close()
+    await handle.close()
+  })
+
+  test('offers the save tool only once it can actually write', async () => {
+    const { tools } = await client.listTools()
+    assert.ok(tools.map((t) => t.name).includes('poi_hensei_save'))
+  })
+
+  test('a save reaches poi’s dispatch as the plugin’s own action', async () => {
+    const result = await client.callTool({
+      name: 'poi_hensei_save',
+      arguments: { title: '決戦', decks: [1], note: 'E-5' },
+    })
+
+    assert.equal(isError(result), false, textOf(result))
+    assert.deepEqual(JSON.parse(textOf(result)), {
+      title: '決戦',
+      fleets: 1,
+      ships: 1,
+      overwritten: false,
+    })
+    assert.deepEqual(sent, [
+      {
+        type: '@@HENSEI_SAVE_DATA',
+        title: '決戦',
+        fleets: { version: 'poi-h-v1', fleets: [[{ id: 101, lv: 5, slots: [] }]], note: 'E-5' },
+      },
+    ])
+  })
+
+  test('a refused save dispatches nothing', async () => {
+    const before = sent.length
+    const result = await client.callTool({
+      name: 'poi_hensei_save',
+      arguments: { title: '', decks: [1] },
+    })
+
+    assert.equal(isError(result), true)
+    assert.equal(sent.length, before)
   })
 })

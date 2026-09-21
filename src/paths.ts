@@ -88,6 +88,15 @@ export const ALLOWED_EXT_PLUGINS: Record<string, string> = {
   'poi-plugin-senka-calc':
     'senka histories: ranking thresholds (5/20/100/501), own senka and rank, HQ experience, ' +
     'EO and quest progress — all plain numbers and number arrays',
+  // The saved fleet compositions (編成日記), title -> record. Its reducer
+  // (`redux/index.ts` in v5.0.5) only ever stores what it loaded from its own
+  // JSON file or received in an action: plain objects, arrays and strings, in
+  // the documented `poi-h-v1` shape. Readable here for a second reason beyond
+  // browsing: poi_hensei_save writes into this branch, and a caller that cannot
+  // read it back cannot check a title before overwriting it, or confirm
+  // afterwards that the record landed.
+  'poi-plugin-hensei-nikki':
+    'saved fleet compositions by title: each ship id, level and equipment, plus a free-text note',
 }
 
 /**
