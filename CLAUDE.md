@@ -28,7 +28,9 @@ node --import tsx scripts/live-check.ts
 This is a poi plugin (a KanColle browser-game companion app) that runs an MCP
 server inside poi's Electron renderer, exposing poi's live redux store —
 ship/fleet/resource state, master data — to MCP clients (e.g. Claude Code) as
-read-only tools. See `docs/superpowers/specs/2026-08-09-poi-plugin-chinjufu-mcp-design.md`
+tools. Reading is the whole of it bar one deliberate exception: `poi_hensei_save`
+writes a fleet record into poi-plugin-hensei-nikki (see `src/hensei.ts`), and is
+registered only when it can actually write. See `docs/superpowers/specs/2026-08-09-poi-plugin-chinjufu-mcp-design.md`
 for the full design rationale; the essentials:
 
 - **`index.ts`** is the poi plugin entry point (`pluginDidLoad`/`pluginWillUnload`).
@@ -42,9 +44,29 @@ for the full design rationale; the essentials:
   bound port to `~/.poi-nanodesu-mcp/port` for clients that need to discover it
   (deliberately not `~/.poi-mcp/port`, which belongs to the unrelated
   `poi-plugin-mcp` package — both can run side by side).
-- **`src/tools.ts`** defines the three tools: `poi_get` (query a store path),
+- **`src/tools.ts`** defines the tools: `poi_get` (query a store path),
   `poi_lookup` (resolve master-data ids via `LOOKUP_KINDS`, e.g. ship/equip
-  names), `poi_describe` (introspect a path's shape before querying it).
+  names), `poi_battle` (read a saved battle record by id), `poi_describe`
+  (introspect a path's shape before querying it), and `poi_hensei_save` — the
+  one tool that writes, see `src/hensei.ts`.
+- **`src/hensei.ts`** is the write boundary. poi shares one redux store across
+  every plugin and publishes `window.dispatch`, so this plugin can dispatch
+  another plugin's action; `poi_hensei_save` does exactly one — hensei-nikki's
+  `@@HENSEI_SAVE_DATA`, the same action its own Add button sends. Deliberately
+  narrow: adding a record only, never delete or rename, and an existing title
+  is refused unless `overwrite: true`, because that plugin's reducer replaces
+  `data[title]` outright with no way back. Persistence is *not* ours — its
+  `pluginDidLoad` installs a redux-observers observer that writes
+  `<APPDATA>/hensei-nikki/<memberId>.json` on every change, so a dispatch lands
+  on disk by itself, and writing that file here would mean owning a second copy
+  of their format and racing their FileWriter. The `poi-h-v1` conversion is
+  loaded from their installed package (`utils/calc.js`) rather than
+  reimplemented, for the same reason `src/questline.ts` reads their asset. Two
+  preconditions are checked before any dispatch, because both failures
+  otherwise look like success: the package must be loadable, and the plugin
+  must have state in the store — a dispatch with their reducer unmounted is
+  silently discarded. Absent either, `src/server.ts` never registers the tool,
+  so a read-only server is the default rather than a setting.
 - **`src/paths.ts`** is the security boundary: `ALLOWED_ROOTS` allowlists which
   top-level store branches (`info`, `const`, `fcd`, `wctf`, `battle`, `sortie`,
   `timers`, `misc`) can be read at all; `DENIED_ROOTS` documents *why* the rest
@@ -119,3 +141,10 @@ for the full design rationale; the essentials:
 → `applyQuery` (query.ts, where/select/limit) → `fitToBytes` (serialize.ts,
 json-safe + byte cap) → MCP tool result. `poiDescribe` skips the query step and
 reports shape (kind, key/element counts, sample fields) instead.
+
+`poi_hensei_save` runs the other way: `readHenseiTitles` (hensei.ts, via the
+same `resolveStorePath` gate — it doubles as the check that the target plugin's
+reducer is mounted) → title/source validation → hensei-nikki's own
+`getHenseiDataByApi`/`getHenseiDataByCode` → `buildSaveAction` →
+`window.dispatch`. Nothing is serialized back; the result reports only what was
+saved.

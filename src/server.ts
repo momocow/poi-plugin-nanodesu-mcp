@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path'
 import { z } from 'zod'
 
 import { type ReadBattle } from './battles.ts'
+import { HENSEI_DATA_PATH, type HenseiCalc } from './hensei.ts'
 import {
   appendRequest,
   describeRequest,
@@ -18,11 +19,14 @@ import {
   poiBattle,
   poiDescribe,
   poiGet,
+  poiHenseiSave,
   poiLookup,
+  type HenseiSaveArgs,
   type ToolResult,
   DEFAULT_LIMIT,
   DEFAULT_MAX_BYTES,
   MAX_BATTLE_IDS,
+  MAX_DECKS,
   MAX_LOOKUP_IDS,
   MAX_MAX_BYTES,
 } from './tools.ts'
@@ -57,6 +61,15 @@ export type ServerOptions = {
   getStore: () => unknown
   /** Reads one saved battle record by id. Omitted when there is none to read. */
   readBattle?: ReadBattle
+  /**
+   * poi's store dispatch, and poi-plugin-hensei-nikki's fleet conversion.
+   *
+   * Both are required before poi_hensei_save — the only tool that writes — is
+   * registered at all, so a server given neither is read-only, and that is the
+   * default rather than something to be configured.
+   */
+  dispatch?: (action: unknown) => void
+  hensei?: HenseiCalc
   port: number
   host?: string
   onStatus?: (status: ServerStatus) => void
@@ -153,10 +166,8 @@ const adapt = <A>(
   handler: (store: unknown, args: A) => ToolResult<unknown>,
 ) => adaptPure<A>((args) => handler(getStore(), args))
 
-async function buildMcpServer(
-  getStore: () => unknown,
-  readBattle?: ReadBattle,
-): Promise<McpServer> {
+async function buildMcpServer(options: ServerOptions): Promise<McpServer> {
+  const { getStore, readBattle } = options
   const { McpServer: Server } = await loadSdk()
   const server = new Server(
     { name: SERVER_NAME, version: SERVER_VERSION },
@@ -318,6 +329,61 @@ async function buildMcpServer(
     adapt(getStore, poiDescribe),
   )
 
+  // The one tool that writes, and only when there is something to write with.
+  // Left unregistered otherwise so a client is never offered a save that
+  // cannot happen.
+  const { dispatch, hensei } = options
+  if (dispatch !== undefined && hensei !== undefined) {
+    server.registerTool(
+      'poi_hensei_save',
+      {
+        title: 'Save a fleet record to 編成日記',
+        description:
+          'Save a fleet composition as a record in the poi-plugin-hensei-nikki (編成日記) ' +
+          'plugin. This is the only tool here that changes anything: it adds the record to ' +
+          "poi's live state, and that plugin writes it to disk immediately. " +
+          `Pass decks to save the fleets the account currently has (1-${MAX_DECKS}, as ` +
+          'numbered in poi), or code to import a composition — a deckbuilder v4 object, a ' +
+          "poi-h-v1 record, or one of that plugin's legacy encodings. " +
+          `Existing records are at ${HENSEI_DATA_PATH}; read them with poi_get to see what ` +
+          'titles are taken.',
+        inputSchema: {
+          title: z
+            .string()
+            .describe(
+              'The record title, which is also its key: a title already in use is refused ' +
+                'unless overwrite is set.',
+            ),
+          note: z.string().optional().describe('Free-text note stored alongside the fleets.'),
+          decks: z
+            .array(z.number().int())
+            .optional()
+            .describe(
+              `Deck numbers to save, 1-${MAX_DECKS}, e.g. [1] for the first fleet or [1, 2] ` +
+                'for a combined one. Mutually exclusive with code.',
+            ),
+          code: z
+            .unknown()
+            .optional()
+            .describe(
+              'A composition to import instead of reading the live fleets. Mutually ' +
+                'exclusive with decks.',
+            ),
+          overwrite: z
+            .boolean()
+            .optional()
+            .describe(
+              'Replace an existing record of the same title. The old composition is gone for ' +
+                'good — read it first if it might matter.',
+            ),
+        },
+      },
+      adaptPure((args: HenseiSaveArgs) =>
+        poiHenseiSave({ store: getStore(), dispatch, calc: hensei }, args),
+      ),
+    )
+  }
+
   return server
 }
 
@@ -418,7 +484,7 @@ export async function startMcpServer(options: ServerOptions): Promise<ServerHand
       enableDnsRebindingProtection: true,
       allowedHosts: [`127.0.0.1:${port}`, `localhost:${port}`, `[::1]:${port}`],
     })
-    const mcp = await buildMcpServer(options.getStore, options.readBattle)
+    const mcp = await buildMcpServer(options)
 
     res.on('close', () => {
       void transport.close()

@@ -16,6 +16,7 @@ export type GetStore = (path?: string) => unknown
 type PoiWindow = {
   isMain?: unknown
   getStore?: unknown
+  dispatch?: unknown
   config?: { get?: unknown; set?: unknown }
   APPDATA_PATH?: unknown
 }
@@ -36,6 +37,29 @@ export function resolveGetStore(window: unknown): GetStore {
     )
   }
   return getStore as GetStore
+}
+
+/**
+ * poi's store dispatch, shared by every plugin in the renderer.
+ *
+ * The counterpart to `resolveGetStore`, and the reason a write tool is
+ * possible at all: poi publishes `store.dispatch` on `window`, so an action
+ * another plugin's reducer handles can be dispatched from here. See
+ * src/hensei.ts for what is done with it and why that is narrow.
+ *
+ * Throws rather than returning `undefined`, like `resolveGetStore`: the caller
+ * has to decide whether a missing dispatch is fatal, and it can only decide
+ * that if it is told.
+ */
+export function resolveDispatch(window: unknown): (action: unknown) => void {
+  const dispatch = asPoiWindow(window).dispatch
+  if (typeof dispatch !== 'function') {
+    throw new Error(
+      'poi did not provide window.dispatch — no action can be dispatched. ' +
+        'This usually means the plugin was loaded outside poi, or poi changed its API.',
+    )
+  }
+  return dispatch as (action: unknown) => void
 }
 
 /**

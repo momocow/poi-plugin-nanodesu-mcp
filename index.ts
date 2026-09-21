@@ -1,10 +1,12 @@
 import { makeBattleReader } from './src/battles.ts'
 import { PORT_CONFIG_KEY, RECENT_CONFIG_KEY } from './src/config.ts'
+import { HENSEI_PACKAGE, loadHenseiCalc } from './src/hensei.ts'
 import {
   isMainWindow,
   readAppDataPath,
   readIntConfig,
   readPortConfig,
+  resolveDispatch,
   resolveGetStore,
 } from './src/poi.ts'
 import { loadQuestLineDb, withQuestLine } from './src/questline.ts'
@@ -82,10 +84,26 @@ export const pluginDidLoad = (): void => {
     console.log(`${LOG_PREFIX} no poi data directory; poi_battle will report itself unavailable`)
   }
 
+  // Both halves of the one write tool. Either being absent leaves the server
+  // read-only — which is the status quo, so neither is worth failing over.
+  let dispatch: ((action: unknown) => void) | undefined
+  try {
+    dispatch = resolveDispatch(poiWindow)
+  } catch (e) {
+    console.log(`${LOG_PREFIX} no dispatch; poi_hensei_save is not offered:`, e)
+  }
+
+  const hensei = loadHenseiCalc(appDataPath)
+  if (hensei === undefined) {
+    console.log(`${LOG_PREFIX} ${HENSEI_PACKAGE} unavailable; poi_hensei_save is not offered`)
+  }
+
   withTimeout(
     startMcpServer({
       getStore: () => withQuestLine(getStore(), questLine),
       readBattle,
+      dispatch,
+      hensei,
       port,
       recentLimit,
       onStatus: setStatus,

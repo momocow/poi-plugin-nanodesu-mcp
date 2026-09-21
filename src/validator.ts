@@ -22,8 +22,10 @@ export type SchemaValidatorProvider = {
  *
  * This validator accepts everything, which is safe *only* because the SDK uses
  * it in exactly one place: validating a client's response to an elicitation
- * request. This server never elicits — it exposes three read-only tools and no
- * sampling or elicitation — so it is never called.
+ * request. This server never elicits, and offers no sampling, so it is never
+ * called. Note that this rests on elicitation alone, not on the tools being
+ * read-only: tool *arguments* are validated by their zod schemas either way,
+ * which is what poi_hensei_save's write path relies on.
  *
  * If elicitation is ever added here, this must be replaced with a real
  * JSON Schema validator.

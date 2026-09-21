@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict'
 import { test, describe } from 'node:test'
 
-import { AKASHIC_EX_PACKAGE, FIELD_TABLE, describeFields, timeRangeAt } from '../src/fields.ts'
+import {
+  AKASHIC_EX_PACKAGE,
+  FIELD_TABLE,
+  describeFields,
+  senkaPath,
+  timeRangeAt,
+} from '../src/fields.ts'
 
 const attackPath = `ext.${AKASHIC_EX_PACKAGE}._.attack.data`
 
@@ -164,4 +170,50 @@ describe('timeRangeAt', () => {
     assert.equal(described.fields?.indexOf('time'), 0)
   })
 
+})
+
+describe('the senka histories', () => {
+  const history = { 0: 1800, 1: 1855 }
+
+  test('warns that every history is keyed by period, not by time', () => {
+    // The whole point of the entries: these keys are small integers that reset
+    // monthly, and read as epochs they date every record to 1970.
+    for (const branch of [
+      'experienceHistory',
+      'exHistory',
+      'questHistory',
+      'rank5',
+      'rank20',
+      'rank100',
+      'rank501',
+      'rankUser',
+    ]) {
+      const { note } = describeFields(senkaPath(branch), history)
+      assert.match(note ?? '', /not timestamps/, `${branch} should warn about the keys`)
+      assert.match(note ?? '', /12-hour/, `${branch} should say what a period is`)
+    }
+  })
+
+  test('warns that a gap is no observation rather than a zero', () => {
+    // Observed live: a 21st-of-the-month archive held 11 of 41 ranking periods,
+    // because a period is recorded only when the ranking page was opened in it.
+    const { note } = describeFields(senkaPath('rank501'), history)
+    assert.match(note ?? '', /sparse/)
+    assert.match(note ?? '', /never a zero/)
+  })
+
+  test('separates the two anchors, an hour apart', () => {
+    assert.match(describeFields(senkaPath('rank501'), history).note ?? '', /03:00/)
+    assert.match(describeFields(senkaPath('experienceHistory'), history).note ?? '', /02:00/)
+  })
+
+  test('calls out 1000, the key that is not a period', () => {
+    const { note } = describeFields(senkaPath('experienceHistory'), history)
+    assert.match(note ?? '', /1000/)
+    assert.match(note ?? '', /7\/10000/)
+  })
+
+  test('names no positional fields: these are records, not rows', () => {
+    assert.equal(describeFields(senkaPath('rank501'), history).fields, undefined)
+  })
 })

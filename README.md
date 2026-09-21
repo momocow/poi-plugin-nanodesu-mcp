@@ -147,6 +147,7 @@ claude mcp add poi --transport http http://127.0.0.1:12450/mcp
 | [poi-plugin-battle-detail](https://github.com/poooi/plugin-battle-detail)                 | 單場戰鬥完整記錄（編成、裝備、封包）                          | **磁碟**上的 gz 檔，依 id 讀               | `poi_battle` 工具                          |
 | [poi-plugin-akashic-records](https://github.com/poooi/plugin-akashic-records)             | 出擊／遠征／建造／解體日誌                               | redux ext state（整包）                | `ext.poi-plugin-akashic-records._`       |
 | [poi-plugin-akashic-records-ex](https://github.com/momocow/poi-plugin-akashic-records-ex) | 同上，另加 quest 日誌                              | redux ext state（整包）                | `ext.poi-plugin-akashic-records-ex._`    |
+| [poi-plugin-senka-calc](https://github.com/ruiii/plugin-Hairstrength)                     | 戰果歷史：排行門檻（5／20／100／501）、自己的戰果與名次、經驗值、EO 與任務進度  | redux ext state（整包）                | `ext.poi-plugin-senka-calc._`            |
 
 有兩個套件各出現兩次，因為它們是**用兩種不同機制**被依賴的：最有價值的資料
 根本不進 redux，所以 state 讀一半、磁碟讀另一半。

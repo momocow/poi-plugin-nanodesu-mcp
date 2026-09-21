@@ -1,5 +1,13 @@
 import { BATTLE_DETAIL_PACKAGE, type ReadBattle } from './battles.ts'
 import { describeFields, timeRangeAt, type TimeRange } from './fields.ts'
+import {
+  buildSaveAction,
+  HENSEI_DATA_PATH,
+  HENSEI_PACKAGE,
+  readHenseiTitles,
+  type HenseiCalc,
+  type HenseiFleet,
+} from './hensei.ts'
 import { readableRoots, resolveStorePath } from './paths.ts'
 import { applyQuery, applySelect, isCollection, type QueryResult } from './query.ts'
 import { fitToBytes, toJsonSafe } from './serialize.ts'
@@ -18,6 +26,34 @@ export type LookupArgs = { kind: string; ids: number[]; select?: string[] }
 export type BattleArgs = { ids: number[]; select?: string[]; maxBytes?: number }
 
 export type DescribeArgs = { path?: string }
+
+export type HenseiSaveArgs = {
+  title: string
+  note?: string
+  decks?: number[]
+  code?: unknown
+  overwrite?: boolean
+}
+
+/**
+ * What the save needs from outside. `dispatch` and `calc` are optional because
+ * both can be genuinely absent — outside poi, or with hensei-nikki not
+ * installed — and the tool reports that rather than pretending to work.
+ */
+export type HenseiSaveDeps = {
+  store: unknown
+  dispatch?: (action: unknown) => void
+  calc?: HenseiCalc
+}
+
+export type HenseiSaveData = {
+  title: string
+  /** Fleets saved, and ships across them: enough to see the record is not empty. */
+  fleets: number
+  ships: number
+  /** True when an existing record of this title was replaced. */
+  overwritten: boolean
+}
 
 export type GetData = QueryResult & { hint?: string }
 
@@ -289,6 +325,175 @@ export function poiBattle(read: ReadBattle | undefined, args: BattleArgs): ToolR
     ok: true,
     data: hints.length > 0 ? { ...payload, hint: hints.join('; ') } : payload,
   }
+}
+
+/** Fleets the game itself has: deck numbers are 1-based, as poi shows them. */
+export const MAX_DECKS = 4
+
+const countShips = (fleets: HenseiFleet[]): number =>
+  fleets.reduce<number>((total, fleet) => total + fleet.filter((ship) => ship != null).length, 0)
+
+/**
+ * Convert live fleets into hensei-nikki's record format, the way their own Add
+ * flow does: the deck's `api_ship` instance ids, resolved against `info.ships`
+ * and `info.equips` by their converter. Empty slots (`-1`) are dropped there.
+ */
+function fleetsFromDecks(
+  store: unknown,
+  calc: HenseiCalc,
+  decks: number[],
+): ToolResult<HenseiFleet[]> {
+  if (!Array.isArray(decks) || decks.length === 0) {
+    return { ok: false, error: `decks must be a non-empty array of deck numbers (1-${MAX_DECKS})` }
+  }
+  const bad = decks.filter((deck) => !Number.isInteger(deck) || deck < 1 || deck > MAX_DECKS)
+  if (bad.length > 0) {
+    return {
+      ok: false,
+      error: `deck numbers must be integers from 1 to ${MAX_DECKS}; got ${bad.join(', ')}`,
+    }
+  }
+  if (new Set(decks).size !== decks.length) {
+    // Saving the same fleet twice into one record is never what was meant.
+    return { ok: false, error: `decks contains the same deck more than once: ${decks.join(', ')}` }
+  }
+
+  const sources: unknown[] = []
+  for (const path of ['info.fleets', 'info.ships', 'info.equips']) {
+    const resolved = resolveStorePath(store, path)
+    if (!resolved.ok) {
+      return { ok: false, error: resolved.error }
+    }
+    sources.push(resolved.value)
+  }
+  const [allFleets, ships, equips] = sources
+
+  if (!Array.isArray(allFleets)) {
+    return { ok: false, error: 'info.fleets is not available — poi may not have loaded the game yet' }
+  }
+  const absent = decks.filter((deck) => deck > allFleets.length)
+  if (absent.length > 0) {
+    return {
+      ok: false,
+      error:
+        `no deck ${absent.join(', ')}: this account has ${allFleets.length} ` +
+        `fleet${allFleets.length === 1 ? '' : 's'}`,
+    }
+  }
+
+  const ids: unknown[] = []
+  for (const deck of decks) {
+    const fleet = allFleets[deck - 1] as { api_ship?: unknown } | undefined
+    const members = fleet?.api_ship
+    if (!Array.isArray(members)) {
+      return { ok: false, error: `deck ${deck} has no api_ship list to read` }
+    }
+    ids.push(members.map((id) => ({ id })))
+  }
+
+  try {
+    return { ok: true, data: calc.getHenseiDataByApi(ids, ships, equips) }
+  } catch (e) {
+    return { ok: false, error: `could not read the fleets: ${messageOf(e)}` }
+  }
+}
+
+/**
+ * Save a fleet composition into poi-plugin-hensei-nikki (編成日記).
+ *
+ * The only tool here that changes anything. It dispatches that plugin's own
+ * save action into poi's shared store — the same action its Add button
+ * dispatches — and that plugin's observer persists the result to its file. See
+ * src/hensei.ts for why it is done that way rather than by writing the file.
+ *
+ * Every refusal below exists because the alternative is a silent wrong answer:
+ * a dispatch with no reducer mounted looks like success, and an existing title
+ * is replaced outright by their reducer with no way back.
+ */
+export function poiHenseiSave(
+  deps: HenseiSaveDeps,
+  args: HenseiSaveArgs,
+): ToolResult<HenseiSaveData> {
+  const { store, dispatch, calc } = deps
+
+  if (calc === undefined) {
+    return {
+      ok: false,
+      error:
+        `saving is not available: the '${HENSEI_PACKAGE}' poi plugin is not installed, so ` +
+        'there is nothing to save a record into. Install or enable it in poi.',
+    }
+  }
+  if (dispatch === undefined) {
+    return {
+      ok: false,
+      error: 'saving is not available: poi did not provide a dispatch, so nothing can be written',
+    }
+  }
+
+  const title = typeof args.title === 'string' ? args.title.trim() : ''
+  if (title === '') {
+    return { ok: false, error: 'title is required and cannot be blank' }
+  }
+
+  // Also the liveness check: their slice is absent exactly when their reducer
+  // is not mounted, and then a dispatch would change nothing.
+  const existing = readHenseiTitles(store)
+  if (!existing.ok) {
+    return { ok: false, error: existing.error }
+  }
+
+  const overwritten = existing.titles.includes(title)
+  if (overwritten && args.overwrite !== true) {
+    return {
+      ok: false,
+      error:
+        `a record titled '${title}' already exists. Saving would replace it outright and the ` +
+        `old composition could not be recovered — read it at ${HENSEI_DATA_PATH} first, then ` +
+        'pass overwrite: true to replace it, or choose another title.',
+    }
+  }
+
+  const hasDecks = args.decks !== undefined
+  const hasCode = args.code !== undefined
+  if (hasDecks === hasCode) {
+    return {
+      ok: false,
+      error: hasDecks
+        ? 'pass either decks or code, not both'
+        : `pass decks (e.g. [1] for the first fleet) or code (a composition to import)`,
+    }
+  }
+
+  let built: ToolResult<HenseiFleet[]>
+  if (hasDecks) {
+    built = fleetsFromDecks(store, calc, args.decks as number[])
+  } else {
+    try {
+      built = { ok: true, data: calc.getHenseiDataByCode(args.code) }
+    } catch (e) {
+      built = { ok: false, error: `could not read the composition: ${messageOf(e)}` }
+    }
+  }
+  if (!built.ok) {
+    return built
+  }
+
+  const fleets = built.data
+  const ships = countShips(fleets)
+  if (fleets.length === 0 || ships === 0) {
+    // hensei-nikki skips empty data when persisting, so this would appear to
+    // save and then not be there after a restart.
+    return {
+      ok: false,
+      error: 'nothing to save: the selected fleets are empty, and an empty record is not kept',
+    }
+  }
+
+  const note = typeof args.note === 'string' ? args.note.trim() : ''
+  dispatch(buildSaveAction(title, fleets, note))
+
+  return { ok: true, data: { title, fleets: fleets.length, ships, overwritten } }
 }
 
 export function poiDescribe(store: unknown, args: DescribeArgs): ToolResult<DescribeData> {
