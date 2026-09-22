@@ -1,6 +1,6 @@
 {
   "name": "poi-plugin-nanodesu-mcp",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Expose poi's live game state to agents over MCP",
   "main": "index.ts",
   "license": "MIT",
