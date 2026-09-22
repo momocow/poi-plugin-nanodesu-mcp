@@ -1,7 +1,7 @@
 # poi-plugin-nanodesu-mcp
 
 一個 [poi](https://github.com/poooi/poi) 插件，把 poi 當下的 KanColle 遊戲狀態
-以唯讀工具的形式開放給 MCP 客戶端（Claude Code，或任何說 MCP 的 agent）。
+以 MCP 工具的形式開放給 MCP 客戶端（Claude Code，或任何說 MCP 的 agent）。
 不必去撈 poi 的快取檔，也沒有過期問題：每一次呼叫讀的都是遊戲正在跑的那個
 redux store。
 
@@ -15,8 +15,15 @@ redux store。
 - **戰鬥歷史**——什麼時候打了哪張圖、走哪條航路、拿什麼評價；
   再往下拉出單場的完整編成、裝備、改修值。
 - **圖鑑查詢**——把遊戲回傳的 id 翻成艦名、裝備名、海域名。
+- **存編成**——把當下的艦隊（或一段貼進來的編成碼）存成一筆
+  [編成日記](https://github.com/poooi/plugin-hensei-nikki)記錄。
 
-全部唯讀：不 dispatch 任何 action、不操作遊戲 webview、不寫回任何東西。
+界線畫在**遊戲**那一側：對遊戲只讀不寫——不送任何遊戲請求、不碰 webview、
+不代替你操作遊戲。寫進 poi 自己（或其他插件）的 state 則在界內，
+`poi_hensei_save` 正是如此：它把一筆編成記進編成日記，遊戲那頭什麼也沒發生。
+
+它仍然是這裡唯一會寫的工具，而且只在真的寫得進去時才註冊——沒裝編成日記、
+或它沒載入，這個工具根本不會出現，不需要任何設定。
 
 ## 核心概念
 
@@ -108,6 +115,25 @@ poi_battle ids=[...] select=["fleet.main[].api_ship_id"]
 開。範圍是**掃過每一列**算出來的，不靠列的排序——實測航海日誌 EX 是新到舊，但那
 是對某張表的觀察，不是插件的保證。
 
+### `poi_hensei_save`
+
+把一筆編成存進 **poi-plugin-hensei-nikki（編成日記）**。這是這裡唯一會寫的
+工具，寫的是 poi 的 state、不是遊戲——它不會替你動遊戲裡的任何一艘船。
+傳 `decks`（poi 裡的艦隊編號，例如 `[1]`，聯合艦隊就 `[1, 2]`）存下當前
+的艦隊，或傳 `code` 匯入一段編成——deckbuilder v4 物件、`poi-h-v1` 記錄、或
+編成日記自己的舊編碼都吃。`title` 同時是記錄的鍵，`note` 可以附一段文字。
+
+寫入走的是編成日記自己的 `@@HENSEI_SAVE_DATA` action——poi 的 redux store 是
+所有插件共用的，這跟按下它自己的「新增」按鈕是同一條路。存檔也是它自己做的：
+它的 observer 一看到 state 變了就寫
+`<APPDATA>/hensei-nikki/<memberId>.json`，所以 dispatch 出去就等於落地了，
+這個插件不碰那個檔案。
+
+刻意只做「新增」，沒有刪除和改名。標題撞名預設直接拒絕，因為對方的 reducer 是
+整筆蓋掉 `data[title]`、舊的編成救不回來；真的要覆蓋得明講 `overwrite: true`。
+現有的記錄可以從 `ext.poi-plugin-hensei-nikki._.henseiData.data` 讀，存之前
+確認標題、存完確認有沒有寫進去，都靠它。
+
 ## 安裝
 
 把這個 repo 用 symlink 掛進 poi 的插件目錄（沒有發佈到 npm）：
@@ -148,20 +174,28 @@ claude mcp add poi --transport http http://127.0.0.1:12450/mcp
 | [poi-plugin-akashic-records](https://github.com/poooi/plugin-akashic-records)             | 出擊／遠征／建造／解體日誌                               | redux ext state（整包）                | `ext.poi-plugin-akashic-records._`       |
 | [poi-plugin-akashic-records-ex](https://github.com/momocow/poi-plugin-akashic-records-ex) | 同上，另加 quest 日誌                              | redux ext state（整包）                | `ext.poi-plugin-akashic-records-ex._`    |
 | [poi-plugin-senka-calc](https://github.com/ruiii/plugin-Hairstrength)                     | 戰果歷史：排行門檻（5／20／100／501）、自己的戰果與名次、經驗值、EO 與任務進度  | redux ext state（整包）                | `ext.poi-plugin-senka-calc._`            |
+| [poi-plugin-hensei-nikki](https://github.com/poooi/plugin-hensei-nikki)        | 已存的編成記錄（依標題，含艦娘、等級、裝備與備註）                   | redux ext state（整包）                | `ext.poi-plugin-hensei-nikki._`           |
+| [poi-plugin-hensei-nikki](https://github.com/poooi/plugin-hensei-nikki)        | `poi-h-v1` 的編成轉換（把 kcsapi 狀態或編成碼轉成它的記錄格式）      | **磁碟**上的隨附模組                      | `poi_hensei_save` 工具                     |
 
-有兩個套件各出現兩次，因為它們是**用兩種不同機制**被依賴的：最有價值的資料
-根本不進 redux，所以 state 讀一半、磁碟讀另一半。
+有三個套件各出現兩次，因為它們是**用兩種不同機制**被依賴的：最有價值的（或
+根本做不出來的）東西不進 redux，所以 state 讀一半、磁碟讀另一半。編成日記是
+同樣的情況——記錄本身在 store 裡，但把遊戲狀態轉成 `poi-h-v1` 的那段邏輯只在
+它的套件裡，與其照抄一份等著走鐘，不如直接載它的。
 
 讀磁碟這半的耦合度明顯較高，它依賴對方**私有的檔案配置**：
 
 ```
 <APPDATA>/plugins/node_modules/poi-plugin-quest-line/assets/quests.json
+<APPDATA>/plugins/node_modules/poi-plugin-hensei-nikki/utils/calc.js
 <APPDATA>/battle-detail/<id>.json.gz
 ```
 
-對方改版搬動檔案，這兩條就會失效。目前的處理是**安靜降級**——載不到就當作沒有，
+對方改版搬動檔案，這幾條就會失效。目前的處理是**安靜降級**——載不到就當作沒有，
 絕不讓插件啟動失敗或讓工具呼叫爆掉——但它不會主動告訴你「這條以前是通的，
 現在壞了」。這是已知的取捨。
+
+編成日記那條的降級方式不太一樣：`calc.js` 載不到，`poi_hensei_save` 就整個不註冊，
+所以看得出來它不在（工具列表裡沒有），而不是呼叫了才發現沒效果。
 
 ## 開發
 
